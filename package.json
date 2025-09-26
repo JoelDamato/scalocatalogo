@@ -1,13 +1,26 @@
 {
-  "name": "scalocatalogo",
-  "version": "1.0.0",
+  "name": "web",
+  "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "cd yes/apps/web && npm install && npm run build",
-    "dev": "cd yes/apps/web && npm install && npm run dev",
-    "start": "cd yes/apps/web && npm start"
+    "dev": "next dev --port 3002",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint --max-warnings 0",
+    "check-types": "tsc --noEmit"
   },
-  "workspaces": [
-    "yes/apps/web"
-  ]
+  "dependencies": {
+    "@supabase/supabase-js": "^2.57.4",
+    "cloudinary": "^2.7.0",
+    "jspdf": "^3.0.3",
+    "next": "^15.5.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "@types/react": "19.1.0",
+    "@types/react-dom": "19.1.1",
+    "typescript": "5.9.2"
+  }
 }

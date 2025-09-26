@@ -1,74 +1,36 @@
-# 🛍️ Scala Catálogo - E-commerce Platform
+This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/create-next-app).
 
-Una plataforma de e-commerce moderna construida con Next.js, Supabase y Cloudinary.
+## Getting Started
 
-## 🚀 Características
+First, run the development server:
 
-- **Catálogo de productos** con búsqueda y filtros
-- **Listas de precios personalizadas** con descuentos
-- **Panel de administración** completo
-- **Sistema de pedidos** por WhatsApp
-- **Gestión de imágenes** con Cloudinary
-- **Carga masiva** de productos via CSV
-- **Diseño responsive** y moderno
-
-## 🔧 Variables de Entorno
-
-Para configurar el proyecto en Vercel, necesitas las siguientes variables de entorno:
-
-### Supabase
-```
-NEXT_PUBLIC_SUPABASE_URL=https://erpmlplzdvesedkgbuzb.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVycG1scGx6ZHZlc2Vka2didXpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgzOTMwNTksImV4cCI6MjA3Mzk2OTA1OX0.sXrmcf2HoY1R2yLGWnSf6BQdMgL2fLG7XOlVuhRaAw
+```bash
+npm run dev
+# or
+yarn dev
+# or
+pnpm dev
+# or
+bun dev
 ```
 
-### Cloudinary
-```
-CLOUDINARY_CLOUD_NAME=dlatm24cg
-CLOUDINARY_API_KEY=145871242324443
-CLOUDINARY_API_SECRET=PQbatR503WGJCbmlGYw2allT-y8
-```
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-### Next.js
-```
-NEXT_PUBLIC_APP_URL=https://tu-app.vercel.app
-```
+You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
-## 📦 Instalación
+This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load Inter, a custom Google Font.
 
-1. Clona el repositorio
-2. Instala las dependencias: `pnpm install`
-3. Configura las variables de entorno
-4. Ejecuta el proyecto: `pnpm dev`
+## Learn More
 
-## 🗄️ Base de Datos
+To learn more about Next.js, take a look at the following resources:
 
-El proyecto usa Supabase. Las tablas necesarias se crean automáticamente:
-- `productos`
-- `ordenes`
-- `configuracion_sistema`
-- `listas_precios`
+- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
+- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
 
-## 🚀 Despliegue en Vercel
+You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
 
-1. Conecta tu repositorio a Vercel
-2. Configura las variables de entorno en el dashboard de Vercel
-3. Despliega automáticamente
+## Deploy on Vercel
 
-## 📱 Funcionalidades
+The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
-- **Página principal** con hero section y CTA
-- **Catálogo de productos** con filtros y búsqueda
-- **Listas de precios** personalizadas con descuentos
-- **Panel de admin** con CRUD completo
-- **Sistema de pedidos** integrado con WhatsApp
-- **Gestión de configuración** del sistema
-- **Carga masiva** de productos via CSV
-
-## 🛠️ Tecnologías
-
-- **Next.js 14** - Framework React
-- **Supabase** - Base de datos y autenticación
-- **Cloudinary** - Gestión de imágenes
-- **TypeScript** - Tipado estático
-- **CSS-in-JS** - Estilos dinámicos
+Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
