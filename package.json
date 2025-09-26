@@ -1,0 +1,13 @@
+{
+  "name": "scalocatalogo",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "cd yes/apps/web && npm install && npm run build",
+    "dev": "cd yes/apps/web && npm install && npm run dev",
+    "start": "cd yes/apps/web && npm start"
+  },
+  "workspaces": [
+    "yes/apps/web"
+  ]
+}
