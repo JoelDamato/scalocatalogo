@@ -12,7 +12,7 @@ export default function AdminFeedback() {
   const [loading, setLoading] = useState(false)
   const [isVisible, setIsVisible] = useState(false)
 
-  useState(() => {
+  useEffect(() => {
     setIsVisible(true)
   }, [])
 
