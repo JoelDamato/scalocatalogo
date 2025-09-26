@@ -1,3 +1,21 @@
+# M DESCARTABLES - E-commerce
+
+Aplicación de e-commerce para productos descartables con:
+- ✅ Gestión de productos y categorías
+- ✅ Sistema de órdenes con WhatsApp
+- ✅ Listas de precios personalizadas
+- ✅ Panel de administración completo
+- ✅ Subida de imágenes con Cloudinary
+- ✅ Autenticación persistente
+- ✅ Exportación de datos a PDF
+- ✅ Carga masiva por CSV
+
+## Tecnologías
+- **Frontend**: Next.js 15 + TypeScript + React 19
+- **Backend**: Supabase (PostgreSQL)
+- **Storage**: Cloudinary
+- **Deployment**: Vercel
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/create-next-app).
 
 ## Getting Started
