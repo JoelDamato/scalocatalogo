@@ -183,6 +183,7 @@ export default function AdminPage() {
         descripcion: '',
         categoria: '',
         precio: '',
+        costo: '',
         foto_url: '',
         publicado: true
       })
