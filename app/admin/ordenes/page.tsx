@@ -123,8 +123,8 @@ export default function AdminOrdenes() {
       const { error } = await supabase
         .from('ordenes')
         .update({ 
-          cliente_nombre: cliente_nombre || null,
-          cliente_telefono: cliente_telefono || null
+          cliente_nombre: cliente_nombre || undefined,
+          cliente_telefono: cliente_telefono || undefined
         })
         .eq('id', ordenEditando.id)
 
@@ -137,7 +137,7 @@ export default function AdminOrdenes() {
       // Actualizar el estado local
       setOrdenes(ordenes.map(orden => 
         orden.id === ordenEditando.id 
-          ? { ...orden, cliente_nombre: cliente_nombre || null, cliente_telefono: cliente_telefono || null }
+          ? { ...orden, cliente_nombre: cliente_nombre || undefined, cliente_telefono: cliente_telefono || undefined }
           : orden
       ))
 
