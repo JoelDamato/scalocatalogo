@@ -28,9 +28,9 @@ interface ListaPrecios {
 }
 
 interface PageProps {
-  params: {
+  params: Promise<{
     slug: string
-  }
+  }>
 }
 
 export default function ListaPreciosPage({ params }: PageProps) {
@@ -45,13 +45,24 @@ export default function ListaPreciosPage({ params }: PageProps) {
   const [isVisible, setIsVisible] = useState(false)
   const [vistaLista, setVistaLista] = useState(false)
   const [mostrarPopupPedido, setMostrarPopupPedido] = useState(false)
+  const [slug, setSlug] = useState<string>('')
   const { configuracion } = useConfiguracion()
 
   useEffect(() => {
-    setIsVisible(true)
-    cargarLista()
-    cargarProductos()
-  }, [params.slug])
+    const initializeSlug = async () => {
+      const resolvedParams = await params
+      setSlug(resolvedParams.slug)
+    }
+    initializeSlug()
+  }, [params])
+
+  useEffect(() => {
+    if (slug) {
+      setIsVisible(true)
+      cargarLista()
+      cargarProductos()
+    }
+  }, [slug])
 
   useEffect(() => {
     filtrarProductos()
@@ -62,7 +73,7 @@ export default function ListaPreciosPage({ params }: PageProps) {
       const { data, error } = await supabase
         .from('listas_precios')
         .select('*')
-        .eq('url_personalizada', params.slug)
+        .eq('url_personalizada', slug)
         .eq('activa', true)
         .single()
 
