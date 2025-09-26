@@ -1,7 +1,15 @@
 {
   "version": 2,
-  "buildCommand": "cd yes/apps/web && npm install && npm run build",
-  "outputDirectory": "yes/apps/web/.next",
-  "installCommand": "cd yes/apps/web && npm install",
-  "devCommand": "cd yes/apps/web && npm run dev"
+  "builds": [
+    {
+      "src": "yes/apps/web/package.json",
+      "use": "@vercel/next"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "yes/apps/web/$1"
+    }
+  ]
 }
