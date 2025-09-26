@@ -580,7 +580,6 @@ export default function ProductosPage() {
                 backdropFilter: 'blur(10px)',
                 border: vistaLista ? '1px solid rgba(139, 92, 246, 0.1)' : '1px solid rgba(139, 92, 246, 0.1)',
                 overflow: vistaLista ? 'visible' : 'hidden',
-                transition: 'all 0.3s ease',
                 cursor: 'pointer',
                 boxShadow: vistaLista ? '0 2px 8px rgba(0, 0, 0, 0.05)' : '0 20px 40px rgba(0, 0, 0, 0.1)',
                 opacity: isVisible ? 1 : 0,
@@ -645,7 +644,8 @@ export default function ProductosPage() {
                           }}
                           onError={(e) => {
                             e.currentTarget.style.display = 'none'
-                            e.currentTarget.nextElementSibling!.style.display = 'flex'
+                            const nextElement = e.currentTarget.nextElementSibling as HTMLElement
+                            if (nextElement) nextElement.style.display = 'flex'
                           }}
                         />
                       ) : null}
@@ -822,7 +822,8 @@ export default function ProductosPage() {
                     }}
                     onError={(e) => {
                       e.currentTarget.style.display = 'none'
-                      e.currentTarget.nextElementSibling!.style.display = 'flex'
+                      const nextElement = e.currentTarget.nextElementSibling as HTMLElement
+                      if (nextElement) nextElement.style.display = 'flex'
                     }}
                   />
                 ) : null}

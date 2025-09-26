@@ -25,6 +25,7 @@ interface ProductoPopular {
   nombre: string
   foto_url: string | null
   precio: number | null
+  costo: number | null
   total_selecciones: number
 }
 
@@ -115,6 +116,7 @@ export default function AdminPage() {
           nombre: item.producto.nombre,
           foto_url: item.producto.foto_url,
           precio: item.producto.precio,
+          costo: item.producto.costo,
           total_selecciones: item.count
         }))
         .sort((a, b) => b.total_selecciones - a.total_selecciones)
@@ -1229,7 +1231,6 @@ export default function AdminPage() {
                 borderRadius: '15px',
                 backdropFilter: 'blur(10px)',
                 border: '1px solid rgba(255, 255, 255, 0.2)',
-                transition: 'all 0.3s ease',
                 opacity: isVisible ? 1 : 0,
                 transform: isVisible ? 'translateY(0)' : 'translateY(30px)',
                 transition: `all 1s ease-out ${0.8 + index * 0.1}s`
