@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import AdminNavbar from "../../../src/components/AdminNavbar"
 import { useAuth } from "../../../src/hooks/useAuth"
 export default function AdminFeedback() {
