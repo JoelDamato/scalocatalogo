@@ -893,6 +893,7 @@ export default function AdminPage() {
             
             <button
               onClick={descargarProductosCSV}
+              disabled={productos.length === 0}
               {...createButtonProps({ variant: 'info', size: 'md', disabled: productos.length === 0 })}
             >
               📥 Descargar CSV
@@ -991,6 +992,7 @@ export default function AdminPage() {
                 
                 <button
                   onClick={cargarProductosCSV}
+                  disabled={!archivoCSV || cargandoCSV}
                   {...createButtonProps({ 
                     variant: 'success', 
                     size: 'md', 
@@ -1244,6 +1246,156 @@ export default function AdminPage() {
                 )}
               </div>
             )}
+          </div>
+
+          {/* Formulario de producto */}
+          {mostrarFormulario && (
+            <div style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(0, 0, 0, 0.8)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 2000,
+              padding: '1rem'
+            }}>
+              <div style={{
+                background: '#FFFFFF',
+                padding: '2.5rem',
+                borderRadius: '20px',
+                border: '1px solid #E5E7EB',
+                maxWidth: '600px',
+                width: '100%',
+                maxHeight: '90vh',
+                overflowY: 'auto',
+                boxShadow: '0 25px 50px rgba(0, 0, 0, 0.3)'
+              }}>
+                <h3 style={{
+                  fontSize: '1.8rem',
+                  fontWeight: '800',
+                  color: '#111827',
+                  marginBottom: '1.5rem',
+                  textAlign: 'center'
+                }}>
+                  {editandoProducto ? '✏️ Editar Producto' : '➕ Nuevo Producto'}
+                </h3>
+                
+                <form onSubmit={manejarSubmit}>
+                      <p style={{
+                        fontSize: '0.75rem',
+                        color: '#6B7280',
+                        margin: '0 0 0.25rem 0'
+                      }}>
+                        Costo
+                      </p>
+                      <p style={{
+                        fontSize: '1rem',
+                        fontWeight: '600',
+                        color: '#111827',
+                        margin: 0
+                      }}>
+                        ${producto.costo?.toFixed(2) || 'No definido'}
+                      </p>
+                      </div>
+            </div>
+
+            <div style={{
+              display: 'flex',
+                    justifyContent: 'space-between',
+                      alignItems: 'center',
+                    marginBottom: '1rem'
+                  }}>
+                    <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem'
+                    }}>
+                      <span style={{
+                        fontSize: '0.875rem',
+                        color: '#6B7280'
+                      }}>
+                        Estado:
+                      </span>
+                      <span style={{
+                        fontSize: '0.875rem',
+                        fontWeight: '500',
+                        color: producto.publicado ? '#10B981' : '#EF4444'
+                      }}>
+                        {producto.publicado ? 'Publicado' : 'No publicado'}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => togglePublicado(producto.id, !producto.publicado)}
+                      {...createButtonProps({ 
+                        variant: producto.publicado ? 'danger' : 'success', 
+                        size: 'sm' 
+                      })}
+                    >
+                      {producto.publicado ? 'Despublicar' : 'Publicar'}
+                    </button>
+        </div>
+
+        <div style={{
+          display: 'flex',
+                    gap: '0.5rem',
+                    flexWrap: 'wrap'
+        }}>
+                    <button
+                      onClick={() => editarProducto(producto)}
+                      {...createButtonProps({ variant: 'info', size: 'sm' })}
+                      style={{
+                        ...createButtonProps({ variant: 'info', size: 'sm' }).style,
+                        flex: 1
+                      }}
+                    >
+                      ✏️ Editar
+                    </button>
+                    <button
+                      onClick={() => eliminarProducto(producto.id)}
+                      {...createButtonProps({ variant: 'danger', size: 'sm' })}
+                      style={{
+                        ...createButtonProps({ variant: 'danger', size: 'sm' }).style,
+                        flex: 1
+                      }}
+                    >
+                      🗑️ Eliminar
+                    </button>
+            </div>
+                  </div>
+                )
+              ))}
+
+              {productosFiltrados.length === 0 && (
+              <div style={{
+                  textAlign: 'center',
+                  padding: '3rem',
+                  color: '#6B7280',
+                  gridColumn: '1 / -1'
+                }}>
+                  <div style={{ fontSize: '4rem', marginBottom: '1rem' }}>
+                    {busquedaAdmin ? '🔍' : '📦'}
+                  </div>
+                  <h3 style={{
+                    fontSize: '1.25rem',
+                    fontWeight: '600',
+                    color: '#111827',
+                    marginBottom: '0.5rem'
+                  }}>
+                    {busquedaAdmin ? 'No se encontraron productos' : 'No hay productos'}
+                  </h3>
+                  <p>
+                    {busquedaAdmin 
+                      ? `No hay productos que coincidan con "${busquedaAdmin}"`
+                      : 'Agrega tu primer producto para comenzar'
+                    }
+                </p>
+              </div>
+            )}
+          </div>
           </div>
 
           {/* Rankings en formato cuadrado */}

@@ -21,7 +21,7 @@ interface ListaPrecios {
   id: string
   nombre: string
   descripcion: string | null
-  porcentaje_descuento: number
+  porcentaje_ganancia: number
   activa: boolean
   url_personalizada: string
   created_at: string
@@ -132,10 +132,10 @@ export default function ListaPreciosPage({ params }: PageProps) {
     setProductosFiltrados(filtrados)
   }
 
-  const calcularPrecioConDescuento = (precioOriginal: number): number => {
-    if (!lista) return precioOriginal
-    const descuento = (precioOriginal * lista.porcentaje_descuento) / 100
-    return precioOriginal - descuento
+  const calcularPrecioConGanancia = (producto: Producto): number => {
+    if (!lista || !producto.costo) return producto.precio || 0
+    const ganancia = (producto.costo * lista.porcentaje_ganancia) / 100
+    return producto.costo + ganancia
   }
 
   const actualizarCantidad = (productoId: string, cantidad: number) => {
@@ -165,9 +165,9 @@ export default function ListaPreciosPage({ params }: PageProps) {
     Object.keys(productosSeleccionados).forEach(productoId => {
       const producto = productos.find(p => p.id === productoId)
       const cantidad = productosSeleccionados[productoId]
-      if (producto && producto.precio && lista) {
-        const precioConDescuento = calcularPrecioConDescuento(producto.precio)
-        total += precioConDescuento * cantidad
+      if (producto && lista) {
+        const precioConGanancia = calcularPrecioConGanancia(producto)
+        total += precioConGanancia * cantidad
       }
     })
     return total
@@ -192,20 +192,18 @@ export default function ListaPreciosPage({ params }: PageProps) {
     let total = 0
     productosElegidos.forEach((producto, index) => {
       const cantidad = productosSeleccionados[producto.id]
-      const precioOriginal = producto.precio || 0
-      const precioConDescuento = calcularPrecioConDescuento(precioOriginal)
-      const subtotal = precioConDescuento * cantidad
+      const precioConGanancia = calcularPrecioConGanancia(producto)
+      const subtotal = precioConGanancia * cantidad
       total += subtotal
       
       mensaje += `${index + 1}. *${producto.nombre}*\n`
       mensaje += `   Cantidad: ${cantidad}\n`
-      mensaje += `   Precio original: $${precioOriginal.toFixed(2)}\n`
-      mensaje += `   Precio con descuento: $${precioConDescuento.toFixed(2)}\n`
+      mensaje += `   Precio con descuento: $${precioConGanancia.toFixed(2)}\n`
       mensaje += `   Subtotal: $${subtotal.toFixed(2)}\n\n`
     })
     
     mensaje += `💰 *Total: $${total.toFixed(2)}*\n\n`
-    mensaje += `🎯 *Descuento aplicado: ${lista?.porcentaje_descuento}%*\n\n`
+    mensaje += `🎯 *Descuento aplicado: ${lista?.porcentaje_ganancia}%*\n\n`
     mensaje += `¡Hola! Me interesa realizar este pedido.`
     
     return mensaje
@@ -232,8 +230,8 @@ export default function ListaPreciosPage({ params }: PageProps) {
             id: producto.id,
             nombre: producto.nombre,
             cantidad: productosSeleccionados[producto.id],
-            precio: calcularPrecioConDescuento(producto.precio || 0),
-            subtotal: calcularPrecioConDescuento(producto.precio || 0) * productosSeleccionados[producto.id]
+            precio: calcularPrecioConGanancia(producto),
+            subtotal: calcularPrecioConGanancia(producto) * productosSeleccionados[producto.id]
           })),
           total: total,
           mensaje_whatsapp: mensaje,
@@ -388,7 +386,7 @@ export default function ListaPreciosPage({ params }: PageProps) {
             boxShadow: '0 4px 15px rgba(139, 92, 246, 0.4)',
             marginTop: '1rem'
           }}>
-            🎯 ¡Disfruta de un {lista.porcentaje_descuento}% de descuento!
+            🎯 ¡Disfruta de un {lista.porcentaje_ganancia}% de descuento!
           </div>
         </div>
 
@@ -591,8 +589,8 @@ export default function ListaPreciosPage({ params }: PageProps) {
         }}>
           {productosFiltrados.map((producto) => {
             const precioOriginal = producto.precio || 0
-            const precioConDescuento = calcularPrecioConDescuento(precioOriginal)
-            const ahorro = precioOriginal - precioConDescuento
+            const precioConGanancia = calcularPrecioConGanancia(producto)
+            const diferencia = precioConGanancia - precioOriginal
 
             return (
               <div key={producto.id} style={{
@@ -605,7 +603,10 @@ export default function ListaPreciosPage({ params }: PageProps) {
                 transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
                 cursor: 'pointer',
                 position: 'relative',
-                overflow: 'hidden'
+                overflow: 'hidden',
+                display: vistaLista ? 'flex' : 'block',
+                alignItems: vistaLista ? 'center' : 'stretch',
+                gap: vistaLista ? '1rem' : '0'
               }}
               onMouseOver={(e) => {
                 e.currentTarget.style.transform = 'translateY(-8px) scale(1.02)'
@@ -633,18 +634,20 @@ export default function ListaPreciosPage({ params }: PageProps) {
                   justifyContent: 'center',
                   color: 'white',
                   fontSize: '14px',
-                  fontWeight: 'bold'
+                  fontWeight: 'bold',
+                  zIndex: 10
                 }}>
                   {productosSeleccionados[producto.id] ? '✓' : ''}
                 </div>
 
                 {producto.foto_url && (
                   <div style={{
-                    width: '100%',
-                    height: '200px',
-                    marginBottom: '1rem',
+                    width: vistaLista ? '80px' : '100%',
+                    height: vistaLista ? '80px' : '200px',
+                    marginBottom: vistaLista ? '0' : '1rem',
                     borderRadius: '10px',
-                    overflow: 'hidden'
+                    overflow: 'hidden',
+                    flexShrink: 0
                   }}>
                     <img
                       src={producto.foto_url}
@@ -658,6 +661,7 @@ export default function ListaPreciosPage({ params }: PageProps) {
                   </div>
                 )}
                 
+                <div style={{ flex: vistaLista ? 1 : 'none' }}>
                 <h3 style={{
                   fontSize: '1.2rem',
                   fontWeight: '600',
@@ -691,7 +695,7 @@ export default function ListaPreciosPage({ params }: PageProps) {
                         fontWeight: '700',
                         color: '#8B5CF6'
                       }}>
-                        ${precioConDescuento.toFixed(2)}
+                        ${precioConGanancia.toFixed(2)}
                       </span>
                       <span style={{
                         fontSize: '1rem',
@@ -708,7 +712,7 @@ export default function ListaPreciosPage({ params }: PageProps) {
                         fontSize: '0.8rem',
                         fontWeight: '600'
                       }}>
-                        Ahorras ${ahorro.toFixed(2)}
+                        Descuento: ${Math.abs(precioOriginal - precioConGanancia).toFixed(2)}
                       </span>
                     </>
                   )}
@@ -799,6 +803,7 @@ export default function ListaPreciosPage({ params }: PageProps) {
                     </button>
                   </div>
                 )}
+                </div>
               </div>
             )
           })}
@@ -1002,7 +1007,7 @@ export default function ListaPreciosPage({ params }: PageProps) {
                 color: '#6B7280',
                 marginBottom: '1rem'
               }}>
-                Descuento aplicado: {lista?.porcentaje_descuento}%
+                Descuento aplicado: {lista?.porcentaje_ganancia}%
               </p>
             </div>
 
@@ -1010,8 +1015,8 @@ export default function ListaPreciosPage({ params }: PageProps) {
               {obtenerProductosSeleccionados().map((producto, index) => {
                 const cantidad = productosSeleccionados[producto.id]
                 const precioOriginal = producto.precio || 0
-                const precioConDescuento = calcularPrecioConDescuento(precioOriginal)
-                const subtotal = precioConDescuento * cantidad
+                const precioConGanancia = calcularPrecioConGanancia(producto)
+                const subtotal = precioConGanancia * cantidad
 
                 return (
                   <div key={producto.id} style={{
@@ -1037,7 +1042,7 @@ export default function ListaPreciosPage({ params }: PageProps) {
                         color: '#6B7280',
                         margin: 0
                       }}>
-                        Cantidad: {cantidad} | Precio: ${precioConDescuento.toFixed(2)}
+                        Cantidad: {cantidad} | Precio: ${precioConGanancia.toFixed(2)}
                       </p>
                     </div>
                     <p style={{
@@ -1135,6 +1140,82 @@ export default function ListaPreciosPage({ params }: PageProps) {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Botón Flotante de Pedido */}
+      {Object.keys(productosSeleccionados).length > 0 && (
+        <div style={{
+          position: 'fixed',
+          bottom: '2rem',
+          right: '2rem',
+          zIndex: 1000,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '1rem',
+          background: '#FFFFFF',
+          padding: '1rem 1.5rem',
+          borderRadius: '20px',
+          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.12)',
+          border: '1px solid #E5E7EB',
+          backdropFilter: 'blur(10px)'
+        }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem'
+          }}>
+            <div style={{
+              background: '#3B82F6',
+              color: '#FFFFFF',
+              borderRadius: '50%',
+              width: '24px',
+              height: '24px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '0.75rem',
+              fontWeight: '600'
+            }}>
+              {Object.values(productosSeleccionados).reduce((sum, cantidad) => sum + cantidad, 0)}
+            </div>
+            <span style={{
+              fontSize: '0.875rem',
+              fontWeight: '500',
+              color: '#6B7280'
+            }}>
+              productos seleccionados
+            </span>
+          </div>
+          
+          <button
+            onClick={mostrarPedido}
+            style={{
+              background: 'linear-gradient(135deg, #25D366 0%, #128C7E 100%)',
+              color: '#FFFFFF',
+              border: 'none',
+              padding: '0.75rem 1.5rem',
+              borderRadius: '12px',
+              fontSize: '1rem',
+              fontWeight: '600',
+              cursor: 'pointer',
+              transition: 'all 0.3s ease',
+              boxShadow: '0 4px 15px rgba(37, 211, 102, 0.4)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem'
+            }}
+            onMouseOver={(e) => {
+              e.currentTarget.style.transform = 'translateY(-2px) scale(1.05)'
+              e.currentTarget.style.boxShadow = '0 6px 20px rgba(37, 211, 102, 0.6)'
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.transform = 'translateY(0) scale(1)'
+              e.currentTarget.style.boxShadow = '0 4px 15px rgba(37, 211, 102, 0.4)'
+            }}
+          >
+            🛒 Hacer mi Pedido
+          </button>
         </div>
       )}
       </main>

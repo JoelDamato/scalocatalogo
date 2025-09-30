@@ -7,6 +7,7 @@ export default function AdminFeedback() {
   const { isAuthenticated, loading: authLoading } = useAuth()
   const [formData, setFormData] = useState({
     nombre: '',
+    email: '',
     mensaje: ''
   })
   const [loading, setLoading] = useState(false)
@@ -21,15 +22,20 @@ export default function AdminFeedback() {
     setLoading(true)
 
     try {
-      const webhookUrl = 'https://discord.com/api/webhooks/1420562679365636178/XpDDNDkn0F8-PHKEHrsYjkNEXw8LVfklLEWlnfmM2XmxxKD2jWCKdHcA5uSCXFJooScK'
+      const webhookUrl = 'https://discord.com/api/webhooks/1421310768669921380/1OugUkFLEe9iYc8BkUUYIvwcHsLnKo9zGjW-Tg5f9JgryM1PGy2_dsuRhHnRYKICDgpC'
       
       const embed = {
-        title: '💬 Nuevo Feedback - M DESCARTABLES',
-        color: 0x8B5CF6, // Color violeta
+        title: '💬 NUEVO FEEDBACK',
+        color: 0x10B981, // Color verde
         fields: [
           {
             name: '👤 Nombre',
             value: formData.nombre || 'Anónimo',
+            inline: true
+          },
+          {
+            name: '📧 Email',
+            value: formData.email || 'No proporcionado',
             inline: true
           },
           {
@@ -44,8 +50,7 @@ export default function AdminFeedback() {
           }
         ],
         footer: {
-          text: 'Sistema de Feedback - M DESCARTABLES',
-          icon_url: 'https://cdn.discordapp.com/embed/avatars/0.png'
+          text: 'Sistema de Feedback - M Descartables'
         },
         timestamp: new Date().toISOString()
       }
@@ -61,8 +66,8 @@ export default function AdminFeedback() {
       })
 
       if (response.ok) {
-        alert('¡Feedback enviado exitosamente! Gracias por tu comentario.')
-        setFormData({ nombre: '', mensaje: '' })
+        alert('¡Feedback enviado exitosamente! Gracias por tu comentario. Te contactaremos pronto por email.')
+        setFormData({ nombre: '', email: '', mensaje: '' })
       } else {
         throw new Error('Error al enviar el feedback')
       }
@@ -85,23 +90,22 @@ export default function AdminFeedback() {
     return (
       <div style={{
         minHeight: '100vh',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        background: '#F9FAFB',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        fontFamily: 'Montserrat, sans-serif'
+        fontFamily: 'system-ui, -apple-system, sans-serif'
       }}>
         <div style={{
-          background: 'rgba(255, 255, 255, 0.1)',
-          backdropFilter: 'blur(20px)',
-          borderRadius: '20px',
+          background: '#FFFFFF',
+          borderRadius: '12px',
           padding: '2rem',
-          border: '1px solid rgba(255, 255, 255, 0.2)',
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
           textAlign: 'center'
         }}>
           <div style={{
             fontSize: '1.2rem',
-            color: 'white',
+            color: '#111827',
             marginBottom: '1rem'
           }}>
             Verificando autenticación...
@@ -115,33 +119,36 @@ export default function AdminFeedback() {
     return (
       <div style={{
         minHeight: '100vh',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        background: '#F9FAFB',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        fontFamily: 'Montserrat, sans-serif'
+        fontFamily: 'system-ui, -apple-system, sans-serif'
       }}>
         <div style={{
-          background: 'rgba(255, 255, 255, 0.1)',
-          backdropFilter: 'blur(20px)',
-          borderRadius: '20px',
+          background: '#FFFFFF',
+          borderRadius: '12px',
           padding: '2rem',
-          border: '1px solid rgba(255, 255, 255, 0.2)',
-          textAlign: 'center'
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
+          textAlign: 'center',
+          border: '1px solid #E5E7EB'
         }}>
           <div style={{
             fontSize: '1.2rem',
-            color: 'white',
+            color: '#111827',
             marginBottom: '1rem'
           }}>
             Acceso no autorizado
           </div>
           <a href="/admin" style={{
-            color: 'white',
+            color: '#FFFFFF',
             textDecoration: 'none',
-            background: 'rgba(255, 255, 255, 0.2)',
-            padding: '0.5rem 1rem',
-            borderRadius: '8px'
+            background: '#111827',
+            padding: '0.75rem 1.5rem',
+            borderRadius: '8px',
+            fontSize: '0.875rem',
+            fontWeight: '500',
+            transition: 'all 0.2s ease'
           }}>
             Ir al login
           </a>
@@ -153,8 +160,9 @@ export default function AdminFeedback() {
   return (
     <div style={{
       minHeight: '100vh',
-      background: '#FFFFFF',
-      padding: '100px 1rem 2rem 1rem'
+      background: '#F9FAFB',
+      padding: '100px 1rem 2rem 1rem',
+      fontFamily: 'system-ui, -apple-system, sans-serif'
     }}>
       <AdminNavbar />
       
@@ -168,46 +176,46 @@ export default function AdminFeedback() {
         {/* Header */}
         <div style={{
           textAlign: 'center',
-          marginBottom: '3rem'
+          marginBottom: '2rem'
         }}>
           <h1 style={{
-            fontSize: 'clamp(2.5rem, 6vw, 4rem)',
-            fontWeight: '800',
-            color: '#000000',
-            marginBottom: '1rem',
-            textShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
+            fontSize: '1.875rem',
+            fontWeight: '700',
+            color: '#111827',
+            marginBottom: '0.5rem',
+            letterSpacing: '-0.025em'
           }}>
-            💬 Feedback
+            Feedback
           </h1>
           <p style={{
-            fontSize: 'clamp(1.1rem, 3vw, 1.25rem)',
+            fontSize: '1.125rem',
             color: '#6B7280',
             maxWidth: '600px',
             margin: '0 auto',
             lineHeight: '1.6'
           }}>
-            Comparte tus comentarios, sugerencias o reporta problemas
+            Comparte tus comentarios, sugerencias o reporta problemas. Te contactaremos por email con nuestra respuesta.
           </p>
         </div>
 
         {/* Formulario */}
         <div style={{
-          background: 'rgba(139, 92, 246, 0.05)',
-          borderRadius: '20px',
-          padding: '2.5rem',
-          border: '1px solid rgba(139, 92, 246, 0.1)',
-          boxShadow: '0 20px 40px rgba(0, 0, 0, 0.05)'
+          background: '#FFFFFF',
+          borderRadius: '16px',
+          padding: '2rem',
+          border: '1px solid #E5E7EB',
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)'
         }}>
           <form onSubmit={handleSubmit}>
-            <div style={{ marginBottom: '2rem' }}>
+            <div style={{ marginBottom: '1.5rem' }}>
               <label style={{
                 display: 'block',
-                fontSize: '1.1rem',
-                fontWeight: '700',
-                color: '#374151',
-                marginBottom: '0.75rem'
+                fontSize: '0.875rem',
+                fontWeight: '500',
+                color: '#111827',
+                marginBottom: '0.5rem'
               }}>
-                👤 Tu Nombre (Opcional)
+                Tu Nombre (Opcional)
               </label>
               <input
                 type="text"
@@ -217,36 +225,86 @@ export default function AdminFeedback() {
                 placeholder="Escribe tu nombre aquí..."
                 style={{
                   width: '100%',
-                  padding: '1rem 1.25rem',
-                  borderRadius: '12px',
-                  border: '2px solid rgba(139, 92, 246, 0.2)',
+                  padding: '0.75rem',
+                  borderRadius: '8px',
+                  border: '1px solid #D1D5DB',
                   fontSize: '1rem',
-                  fontWeight: '500',
+                  fontWeight: '400',
                   outline: 'none',
-                  transition: 'all 0.3s ease',
-                  background: '#FFFFFF',
-                  color: '#374151'
+                  transition: 'all 0.2s ease',
+                  background: '#F3F4F6',
+                  color: '#111827',
+                  boxSizing: 'border-box'
                 }}
                 onFocus={(e) => {
-                  e.target.style.borderColor = '#8B5CF6'
-                  e.target.style.boxShadow = '0 0 0 3px rgba(139, 92, 246, 0.1)'
+                  e.target.style.borderColor = '#111827'
+                  e.target.style.boxShadow = '0 0 0 3px rgba(17, 24, 39, 0.1)'
                 }}
                 onBlur={(e) => {
-                  e.target.style.borderColor = 'rgba(139, 92, 246, 0.2)'
+                  e.target.style.borderColor = '#D1D5DB'
                   e.target.style.boxShadow = 'none'
                 }}
               />
             </div>
 
-            <div style={{ marginBottom: '2.5rem' }}>
+            <div style={{ marginBottom: '1.5rem' }}>
               <label style={{
                 display: 'block',
-                fontSize: '1.1rem',
-                fontWeight: '700',
-                color: '#374151',
-                marginBottom: '0.75rem'
+                fontSize: '0.875rem',
+                fontWeight: '500',
+                color: '#111827',
+                marginBottom: '0.5rem'
               }}>
-                💭 Tu Mensaje *
+                Tu Email *
+              </label>
+              <input
+                type="email"
+                name="email"
+                value={formData.email}
+                onChange={handleChange}
+                placeholder="tu-email@ejemplo.com"
+                required
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  borderRadius: '8px',
+                  border: '1px solid #D1D5DB',
+                  fontSize: '1rem',
+                  fontWeight: '400',
+                  outline: 'none',
+                  transition: 'all 0.2s ease',
+                  background: '#F3F4F6',
+                  color: '#111827',
+                  boxSizing: 'border-box'
+                }}
+                onFocus={(e) => {
+                  e.target.style.borderColor = '#111827'
+                  e.target.style.boxShadow = '0 0 0 3px rgba(17, 24, 39, 0.1)'
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = '#D1D5DB'
+                  e.target.style.boxShadow = 'none'
+                }}
+              />
+              <p style={{
+                fontSize: '0.875rem',
+                color: '#6B7280',
+                marginTop: '0.5rem',
+                marginBottom: 0
+              }}>
+                Te contactaremos a este email con nuestra respuesta
+              </p>
+            </div>
+
+            <div style={{ marginBottom: '2rem' }}>
+              <label style={{
+                display: 'block',
+                fontSize: '0.875rem',
+                fontWeight: '500',
+                color: '#111827',
+                marginBottom: '0.5rem'
+              }}>
+                Tu Mensaje *
               </label>
               <textarea
                 name="mensaje"
@@ -257,30 +315,31 @@ export default function AdminFeedback() {
                 required
                 style={{
                   width: '100%',
-                  padding: '1rem 1.25rem',
-                  borderRadius: '12px',
-                  border: '2px solid rgba(139, 92, 246, 0.2)',
+                  padding: '0.75rem',
+                  borderRadius: '8px',
+                  border: '1px solid #D1D5DB',
                   fontSize: '1rem',
-                  fontWeight: '500',
+                  fontWeight: '400',
                   outline: 'none',
-                  transition: 'all 0.3s ease',
-                  background: '#FFFFFF',
-                  color: '#374151',
+                  transition: 'all 0.2s ease',
+                  background: '#F3F4F6',
+                  color: '#111827',
                   resize: 'vertical',
                   minHeight: '120px',
-                  fontFamily: 'inherit'
+                  fontFamily: 'system-ui, -apple-system, sans-serif',
+                  boxSizing: 'border-box'
                 }}
                 onFocus={(e) => {
-                  e.target.style.borderColor = '#8B5CF6'
-                  e.target.style.boxShadow = '0 0 0 3px rgba(139, 92, 246, 0.1)'
+                  e.target.style.borderColor = '#111827'
+                  e.target.style.boxShadow = '0 0 0 3px rgba(17, 24, 39, 0.1)'
                 }}
                 onBlur={(e) => {
-                  e.target.style.borderColor = 'rgba(139, 92, 246, 0.2)'
+                  e.target.style.borderColor = '#D1D5DB'
                   e.target.style.boxShadow = 'none'
                 }}
               />
               <p style={{
-                fontSize: '0.9rem',
+                fontSize: '0.875rem',
                 color: '#6B7280',
                 marginTop: '0.5rem',
                 marginBottom: 0
@@ -297,7 +356,7 @@ export default function AdminFeedback() {
             }}>
               <button
                 type="button"
-                onClick={() => setFormData({ nombre: '', mensaje: '' })}
+                onClick={() => setFormData({ nombre: '', email: '', mensaje: '' })}
                 style={{
                   background: 'transparent',
                   color: '#6B7280',
@@ -328,7 +387,7 @@ export default function AdminFeedback() {
 
               <button
                 type="submit"
-                disabled={loading || !formData.mensaje.trim()}
+                disabled={loading || !formData.mensaje.trim() || !formData.email.trim()}
                 style={{
                   background: loading 
                     ? 'linear-gradient(135deg, #9CA3AF 0%, #6B7280 100%)'
@@ -405,9 +464,9 @@ export default function AdminFeedback() {
             lineHeight: '1.6',
             margin: 0
           }}>
-            Tu feedback será enviado directamente a nuestro equipo de desarrollo a través de Discord. 
+            Tu feedback será enviado directamente a nuestro equipo de desarrollo. 
             Te responderemos lo antes posible. ¡Gracias por ayudarnos a mejorar!
-          </p>
+          </p>u
         </div>
       </main>
 

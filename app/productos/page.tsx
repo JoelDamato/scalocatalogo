@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../../src/lib/supabase'
 import Link from 'next/link'
 import { useConfiguracion } from '../../src/hooks/useConfiguracion'
+import { toast } from 'react-toastify'
 
 interface Producto {
   id: string
@@ -19,6 +20,7 @@ interface Producto {
 export default function ProductosPage() {
   const [productos, setProductos] = useState<Producto[]>([])
   const [productosFiltrados, setProductosFiltrados] = useState<Producto[]>([])
+  const [productosDestacados, setProductosDestacados] = useState<Producto[]>([])
   const [productosSeleccionados, setProductosSeleccionados] = useState<{[key: string]: number}>({})
   const [busqueda, setBusqueda] = useState('')
   const [categoriaFiltro, setCategoriaFiltro] = useState('')
@@ -27,16 +29,29 @@ export default function ProductosPage() {
   const [isVisible, setIsVisible] = useState(false)
   const [mostrarPopupPedido, setMostrarPopupPedido] = useState(false)
   const [vistaLista, setVistaLista] = useState(false)
+  const [carruselIndice, setCarruselIndice] = useState(0)
   const { configuracion } = useConfiguracion()
 
   useEffect(() => {
     setIsVisible(true)
     cargarProductos()
+    cargarProductosDestacados()
   }, [])
 
   useEffect(() => {
     filtrarProductos()
   }, [productos, busqueda, categoriaFiltro])
+
+  // Carrusel manual solamente (sin movimiento automático)
+  // useEffect(() => {
+  //   if (productosDestacados.length > 0) {
+  //     const interval = setInterval(() => {
+  //       setCarruselIndice(prev => (prev + 1) % productosDestacados.length)
+  //     }, 8000) // Cambia cada 8 segundos
+  //     
+  //     return () => clearInterval(interval)
+  //   }
+  // }, [productosDestacados.length])
 
   const cargarProductos = async () => {
     try {
@@ -62,6 +77,27 @@ export default function ProductosPage() {
     } catch (error) {
       console.error('Error:', error)
       setLoading(false)
+    }
+  }
+
+  const cargarProductosDestacados = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('productos')
+        .select('*')
+        .eq('publicado', true)
+        .not('foto_url', 'is', null) // Solo productos con foto
+        .limit(6) // Máximo 6 productos destacados
+        .order('created_at', { ascending: false }) // Los más recientes
+
+      if (error) {
+        console.error('Error cargando productos destacados:', error)
+        return
+      }
+
+      setProductosDestacados(data || [])
+    } catch (error) {
+      console.error('Error cargando productos destacados:', error)
     }
   }
 
@@ -170,7 +206,7 @@ export default function ProductosPage() {
   const enviarWhatsApp = async () => {
     const productosSeleccionadosArray = obtenerProductosSeleccionados()
     if (productosSeleccionadosArray.length === 0) {
-      alert('Por favor selecciona al menos un producto')
+      toast.warn('Por favor selecciona al menos un producto')
       return
     }
 
@@ -198,7 +234,7 @@ export default function ProductosPage() {
 
       if (error) {
         console.error('Error guardando orden:', error)
-        alert('Error al guardar la orden, pero se abrirá WhatsApp')
+        toast.error('Error al guardar la orden, pero se abrirá WhatsApp')
       } else {
         console.log('Orden guardada exitosamente')
       }
@@ -216,7 +252,7 @@ export default function ProductosPage() {
   const mostrarPedido = () => {
     const productosSeleccionadosArray = obtenerProductosSeleccionados()
     if (productosSeleccionadosArray.length === 0) {
-      alert('Por favor selecciona al menos un producto')
+      toast.warn('Por favor selecciona al menos un producto')
       return
     }
     setMostrarPopupPedido(true)
@@ -336,6 +372,279 @@ export default function ProductosPage() {
             Explora nuestra amplia gama de productos descartables de calidad premium
           </p>
         </div>
+
+        {/* Carrusel de Productos Destacados */}
+        {productosDestacados.length > 0 && (
+          <div style={{
+            marginBottom: '3rem',
+            opacity: isVisible ? 1 : 0,
+            transform: isVisible ? 'translateY(0)' : 'translateY(30px)',
+            transition: 'all 1s ease-out 0.1s'
+          }}>
+            <h2 style={{
+              fontSize: '1.75rem',
+              fontWeight: '700',
+              color: '#111827',
+              textAlign: 'center',
+              marginBottom: '2rem',
+              textShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
+            }}>
+               Productos Destacados
+            </h2>
+            
+            <div style={{
+              position: 'relative',
+              maxWidth: '1200px',
+              margin: '0 auto',
+              overflow: 'hidden',
+              borderRadius: '20px',
+              boxShadow: '0 20px 40px rgba(0, 0, 0, 0.1)',
+              background: 'rgba(255, 255, 255, 0.95)',
+              backdropFilter: 'blur(10px)',
+              border: '1px solid rgba(255, 255, 255, 0.2)'
+            }}>
+              {/* Carrusel contenedor */}
+              <div style={{
+                display: 'flex',
+                transform: `translateX(-${carruselIndice * 100}%)`,
+                transition: 'transform 1.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+                width: `${productosDestacados.length * 100}%`
+              }}>
+                {productosDestacados.map((producto, index) => (
+                  <div key={producto.id} style={{
+                    width: '100%',
+                    flexShrink: 0,
+                    padding: '2rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '2rem',
+                    minHeight: '300px'
+                  }}>
+                    {/* Imagen del producto */}
+                    <div style={{
+                      width: '200px',
+                      height: '200px',
+                      borderRadius: '15px',
+                      overflow: 'hidden',
+                      flexShrink: 0,
+                      boxShadow: '0 10px 25px rgba(0, 0, 0, 0.1)',
+                      background: '#F8F9FA'
+                    }}>
+                      {producto.foto_url ? (
+                        <img
+                          src={producto.foto_url}
+                          alt={producto.nombre}
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'contain',
+                            background: '#F8F9FA'
+                          }}
+                        />
+                      ) : (
+                        <div style={{
+                          width: '100%',
+                          height: '100%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          background: 'rgba(139, 92, 246, 0.05)',
+                          color: '#9CA3AF',
+                          fontSize: '3rem'
+                        }}>
+                          📦
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Información del producto */}
+                    <div style={{ flex: 1 }}>
+                      <h3 style={{
+                        fontSize: '1.5rem',
+                        fontWeight: '700',
+                        color: '#111827',
+                        marginBottom: '0.75rem',
+                        lineHeight: '1.3'
+                      }}>
+                        {producto.nombre}
+                      </h3>
+                      
+                      {producto.descripcion && (
+                        <p style={{
+                          fontSize: '1rem',
+                          color: '#6B7280',
+                          lineHeight: '1.6',
+                          marginBottom: '1rem'
+                        }}>
+                          {producto.descripcion}
+                        </p>
+                      )}
+                      
+                      {producto.categoria && (
+                        <div style={{
+                          display: 'inline-block',
+                          background: 'rgba(139, 92, 246, 0.1)',
+                          color: '#8B5CF6',
+                          padding: '0.25rem 0.75rem',
+                          borderRadius: '20px',
+                          fontSize: '0.875rem',
+                          fontWeight: '500',
+                          marginBottom: '1rem'
+                        }}>
+                          {producto.categoria}
+                        </div>
+                      )}
+                      
+                      {producto.precio && (
+                        <div style={{
+                          fontSize: '2rem',
+                          fontWeight: '800',
+                          color: '#10B981',
+                          marginBottom: '1rem'
+                        }}>
+                          ${producto.precio.toFixed(2)}
+                        </div>
+                      )}
+                      
+                      <button
+                        onClick={() => actualizarCantidad(producto.id, (productosSeleccionados[producto.id] || 0) + 1)}
+                        style={{
+                          background: 'linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%)',
+                          color: '#FFFFFF',
+                          border: 'none',
+                          padding: '0.75rem 2rem',
+                          borderRadius: '12px',
+                          fontSize: '1rem',
+                          fontWeight: '600',
+                          cursor: 'pointer',
+                          transition: 'all 0.3s ease',
+                          boxShadow: '0 4px 15px rgba(139, 92, 246, 0.3)'
+                        }}
+                        onMouseOver={(e) => {
+                          e.currentTarget.style.transform = 'translateY(-2px)'
+                          e.currentTarget.style.boxShadow = '0 8px 25px rgba(139, 92, 246, 0.4)'
+                        }}
+                        onMouseOut={(e) => {
+                          e.currentTarget.style.transform = 'translateY(0)'
+                          e.currentTarget.style.boxShadow = '0 4px 15px rgba(139, 92, 246, 0.3)'
+                        }}
+                      >
+                        ➕ Agregar al pedido
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              
+              {/* Indicadores */}
+              <div style={{
+                position: 'absolute',
+                bottom: '1rem',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                display: 'flex',
+                gap: '0.5rem',
+                zIndex: 2
+              }}>
+                {productosDestacados.map((_, index) => (
+                  <button
+                    key={index}
+                    onClick={() => setCarruselIndice(index)}
+                    style={{
+                      width: '12px',
+                      height: '12px',
+                      borderRadius: '50%',
+                      border: 'none',
+                      background: index === carruselIndice 
+                        ? '#8B5CF6' 
+                        : 'rgba(139, 92, 246, 0.3)',
+                      cursor: 'pointer',
+                      transition: 'all 0.3s ease',
+                      boxShadow: index === carruselIndice 
+                        ? '0 0 0 2px rgba(139, 92, 246, 0.3)' 
+                        : 'none'
+                    }}
+                  />
+                ))}
+              </div>
+              
+              {/* Botones de navegación */}
+              <button
+                onClick={() => setCarruselIndice(prev => 
+                  prev === 0 ? productosDestacados.length - 1 : prev - 1
+                )}
+                style={{
+                  position: 'absolute',
+                  left: '1rem',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'rgba(255, 255, 255, 0.9)',
+                  border: '1px solid rgba(139, 92, 246, 0.2)',
+                  width: '50px',
+                  height: '50px',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  fontSize: '1.25rem',
+                  color: '#8B5CF6',
+                  transition: 'all 0.3s ease',
+                  zIndex: 2,
+                  backdropFilter: 'blur(10px)',
+                  boxShadow: '0 4px 15px rgba(0, 0, 0, 0.1)'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.background = 'rgba(139, 92, 246, 0.1)'
+                  e.currentTarget.style.transform = 'translateY(-50%) scale(1.1)'
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.9)'
+                  e.currentTarget.style.transform = 'translateY(-50%) scale(1)'
+                }}
+              >
+                ←
+              </button>
+              
+              <button
+                onClick={() => setCarruselIndice(prev => 
+                  (prev + 1) % productosDestacados.length
+                )}
+                style={{
+                  position: 'absolute',
+                  right: '1rem',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'rgba(255, 255, 255, 0.9)',
+                  border: '1px solid rgba(139, 92, 246, 0.2)',
+                  width: '50px',
+                  height: '50px',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  fontSize: '1.25rem',
+                  color: '#8B5CF6',
+                  transition: 'all 0.3s ease',
+                  zIndex: 2,
+                  backdropFilter: 'blur(10px)',
+                  boxShadow: '0 4px 15px rgba(0, 0, 0, 0.1)'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.background = 'rgba(139, 92, 246, 0.1)'
+                  e.currentTarget.style.transform = 'translateY(-50%) scale(1.1)'
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.9)'
+                  e.currentTarget.style.transform = 'translateY(-50%) scale(1)'
+                }}
+              >
+                →
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Filters */}
         <div style={{
@@ -640,7 +949,8 @@ export default function ProductosPage() {
                           style={{
                             width: '100%',
                             height: '100%',
-                            objectFit: 'cover'
+                            objectFit: 'contain',
+                            background: '#F8F9FA'
                           }}
                           onError={(e) => {
                             e.currentTarget.style.display = 'none'
@@ -818,7 +1128,8 @@ export default function ProductosPage() {
                     style={{
                       width: '100%',
                       height: '100%',
-                      objectFit: 'cover'
+                      objectFit: 'contain',
+                      background: '#F8F9FA'
                     }}
                     onError={(e) => {
                       e.currentTarget.style.display = 'none'

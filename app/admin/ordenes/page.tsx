@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../../src/lib/supabase'
 import AdminNavbar from '../../../src/components/AdminNavbar'
-import { useAuth } from '../../../src/hooks/useAuth'
+import { useAuth } from '../../../src/hooks/useAuth_simple'
 
 interface Orden {
   id: string
@@ -23,19 +23,71 @@ interface Orden {
   updated_at: string
 }
 
+interface Producto {
+  id: string
+  nombre: string
+  precio: number | null
+  costo: number | null
+  categoria: string | null
+  publicado: boolean
+}
+
+interface ListaPrecios {
+  id: string
+  nombre: string
+  porcentaje_ganancia: number
+  activa: boolean
+}
+
+interface EstadisticasFacturacion {
+  facturacionDia: number
+  facturacionMes: number
+  ordenesHoy: number
+  ordenesMes: number
+}
+
 export default function AdminOrdenes() {
   const { isAuthenticated, loading: authLoading } = useAuth()
   const [ordenes, setOrdenes] = useState<Orden[]>([])
   const [loading, setLoading] = useState(true)
   const [filtroEstado, setFiltroEstado] = useState<string>('')
   const [isVisible, setIsVisible] = useState(false)
-  const [ordenEditando, setOrdenEditando] = useState<Orden | null>(null)
-  const [mostrarFormularioEdicion, setMostrarFormularioEdicion] = useState(false)
+  
+  // Estados para crear nueva orden
+  const [mostrarFormularioNuevaOrden, setMostrarFormularioNuevaOrden] = useState(false)
+  const [productos, setProductos] = useState<Producto[]>([])
+  const [listasPrecios, setListasPrecios] = useState<ListaPrecios[]>([])
+  const [listaSeleccionada, setListaSeleccionada] = useState<string>('precio_base')
+  const [productosSeleccionados, setProductosSeleccionados] = useState<{[key: string]: number}>({})
+  const [clienteNombre, setClienteNombre] = useState('')
+  const [clienteTelefono, setClienteTelefono] = useState('')
+  
+  // Estados para estadísticas
+  const [estadisticas, setEstadisticas] = useState<EstadisticasFacturacion>({
+    facturacionDia: 0,
+    facturacionMes: 0,
+    ordenesHoy: 0,
+    ordenesMes: 0
+  })
+
+  // Estados para edición de facturas
+  const [facturaEditando, setFacturaEditando] = useState<Orden | null>(null)
+  const [mostrarModalEdicion, setMostrarModalEdicion] = useState(false)
+  const [productosEditando, setProductosEditando] = useState<{[key: string]: number}>({})
 
   useEffect(() => {
     setIsVisible(true)
-    cargarOrdenes()
+    cargarDatos()
   }, [])
+
+  const cargarDatos = async () => {
+    await Promise.all([
+      cargarOrdenes(),
+      cargarProductos(),
+      cargarListasPrecios(),
+      cargarEstadisticas()
+    ])
+  }
 
   const cargarOrdenes = async () => {
     try {
@@ -57,6 +109,201 @@ export default function AdminOrdenes() {
     }
   }
 
+  const cargarProductos = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('productos')
+        .select('id, nombre, precio, costo, categoria, publicado')
+        .eq('publicado', true)
+        .order('nombre')
+
+      if (error) {
+        console.error('Error cargando productos:', error)
+        return
+      }
+
+      setProductos(data || [])
+    } catch (error) {
+      console.error('Error:', error)
+    }
+  }
+
+  const cargarListasPrecios = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('listas_precios')
+        .select('*')
+        .eq('activa', true)
+        .order('nombre')
+
+      if (error) {
+        console.error('Error cargando listas de precios:', error)
+        return
+      }
+
+      setListasPrecios(data || [])
+    } catch (error) {
+      console.error('Error:', error)
+    }
+  }
+
+  const cargarEstadisticas = async () => {
+    try {
+      const hoy = new Date()
+      const inicioDelDia = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate())
+      const inicioDelMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1)
+
+      // Facturación del día
+      const { data: ordenesHoy, error: errorHoy } = await supabase
+        .from('ordenes')
+        .select('total')
+        .eq('estado', 'vendida')
+        .gte('created_at', inicioDelDia.toISOString())
+
+      // Facturación del mes
+      const { data: ordenesMes, error: errorMes } = await supabase
+        .from('ordenes')
+        .select('total')
+        .eq('estado', 'vendida')
+        .gte('created_at', inicioDelMes.toISOString())
+
+      // Contar órdenes del día
+      const { count: countHoy, error: errorCountHoy } = await supabase
+        .from('ordenes')
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', inicioDelDia.toISOString())
+
+      // Contar órdenes del mes
+      const { count: countMes, error: errorCountMes } = await supabase
+        .from('ordenes')
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', inicioDelMes.toISOString())
+
+      if (!errorHoy && !errorMes && !errorCountHoy && !errorCountMes) {
+        const facturacionDia = ordenesHoy?.reduce((sum, orden) => sum + (orden.total || 0), 0) || 0
+        const facturacionMes = ordenesMes?.reduce((sum, orden) => sum + (orden.total || 0), 0) || 0
+
+        setEstadisticas({
+          facturacionDia,
+          facturacionMes,
+          ordenesHoy: countHoy || 0,
+          ordenesMes: countMes || 0
+        })
+      }
+    } catch (error) {
+      console.error('Error cargando estadísticas:', error)
+    }
+  }
+
+  // Funciones para crear nueva orden
+  const calcularPrecioProducto = (producto: Producto) => {
+    if (listaSeleccionada === 'precio_base') {
+      return producto.precio || 0
+    }
+    
+    const lista = listasPrecios.find(l => l.id === listaSeleccionada)
+    if (!lista || !producto.costo) {
+      return producto.precio || 0
+    }
+    
+    return producto.costo * (1 + lista.porcentaje_ganancia / 100)
+  }
+
+  const toggleProductoSeleccionado = (productoId: string) => {
+    setProductosSeleccionados(prev => ({
+      ...prev,
+      [productoId]: prev[productoId] ? prev[productoId] + 1 : 1
+    }))
+  }
+
+  const actualizarCantidadProducto = (productoId: string, cantidad: number) => {
+    if (cantidad <= 0) {
+      const nuevosProductos = { ...productosSeleccionados }
+      delete nuevosProductos[productoId]
+      setProductosSeleccionados(nuevosProductos)
+    } else {
+      setProductosSeleccionados(prev => ({
+        ...prev,
+        [productoId]: cantidad
+      }))
+    }
+  }
+
+  const calcularTotalOrden = () => {
+    return Object.entries(productosSeleccionados).reduce((total, [productoId, cantidad]) => {
+      const producto = productos.find(p => p.id === productoId)
+      if (!producto) return total
+      
+      const precio = calcularPrecioProducto(producto)
+      return total + (precio * cantidad)
+    }, 0)
+  }
+
+  const crearNuevaOrden = async () => {
+    if (!clienteNombre || Object.keys(productosSeleccionados).length === 0) {
+      alert('Por favor completa el nombre del cliente y selecciona al menos un producto')
+      return
+    }
+
+    try {
+      const productosOrden = Object.entries(productosSeleccionados).map(([productoId, cantidad]) => {
+        const producto = productos.find(p => p.id === productoId)!
+        const precio = calcularPrecioProducto(producto)
+        return {
+          id: producto.id,
+          nombre: producto.nombre,
+          cantidad,
+          precio,
+          subtotal: precio * cantidad
+        }
+      })
+
+      const total = calcularTotalOrden()
+      const nombreLista = listaSeleccionada === 'precio_base' ? 'Precio Base' : 
+        listasPrecios.find(l => l.id === listaSeleccionada)?.nombre || 'Lista Personalizada'
+
+      const mensajeWhatsApp = `*Nueva Orden - ${nombreLista}*\n\n` +
+        `*Cliente:* ${clienteNombre}\n` +
+        `*Teléfono:* ${clienteTelefono || 'No proporcionado'}\n\n` +
+        `*Productos:*\n` +
+        productosOrden.map(p => `• ${p.nombre} x${p.cantidad} - $${p.subtotal.toFixed(2)}`).join('\n') +
+        `\n\n*Total: $${total.toFixed(2)}*`
+
+      const { data, error } = await supabase
+        .from('ordenes')
+        .insert({
+          cliente_nombre: clienteNombre,
+          cliente_telefono: clienteTelefono || undefined,
+          productos: productosOrden,
+          total,
+          estado: 'pendiente',
+          mensaje_whatsapp: mensajeWhatsApp
+        })
+        .select()
+
+      if (error) {
+        console.error('Error creando orden:', error)
+        alert('Error al crear la orden')
+        return
+      }
+
+      // Limpiar formulario
+      setClienteNombre('')
+      setClienteTelefono('')
+      setProductosSeleccionados({})
+      setListaSeleccionada('precio_base')
+      setMostrarFormularioNuevaOrden(false)
+
+      // Recargar datos
+      await cargarDatos()
+      alert('Orden creada exitosamente')
+
+    } catch (error) {
+      console.error('Error:', error)
+      alert('Error al crear la orden')
+    }
+  }
+
   const actualizarEstadoOrden = async (ordenId: string, nuevoEstado: string) => {
     try {
       const { error } = await supabase
@@ -65,23 +312,26 @@ export default function AdminOrdenes() {
         .eq('id', ordenId)
 
       if (error) {
-        console.error('Error actualizando orden:', error)
-        alert('Error al actualizar el estado de la orden')
+        console.error('Error actualizando estado:', error)
         return
       }
 
-      // Actualizar el estado local
       setOrdenes(ordenes.map(orden => 
-        orden.id === ordenId ? { ...orden, estado: nuevoEstado as any } : orden
+        orden.id === ordenId 
+          ? { ...orden, estado: nuevoEstado as any }
+          : orden
       ))
+
+      // Recargar estadísticas
+      await cargarEstadisticas()
     } catch (error) {
       console.error('Error:', error)
-      alert('Error al actualizar el estado de la orden')
     }
   }
 
-  const eliminarOrden = async (ordenId: string) => {
-    if (!confirm('¿Estás seguro de que quieres eliminar esta orden? Esta acción no se puede deshacer.')) {
+  // Función para eliminar factura
+  const eliminarFactura = async (facturaId: string) => {
+    if (!confirm('¿Estás seguro de que deseas eliminar esta factura? Esta acción no se puede deshacer.')) {
       return
     }
 
@@ -89,193 +339,266 @@ export default function AdminOrdenes() {
       const { error } = await supabase
         .from('ordenes')
         .delete()
-        .eq('id', ordenId)
+        .eq('id', facturaId)
 
-      if (error) {
-        console.error('Error eliminando orden:', error)
-        alert('Error al eliminar la orden')
-        return
-      }
+      if (error) throw error
 
-      // Actualizar el estado local
-      setOrdenes(ordenes.filter(orden => orden.id !== ordenId))
-      alert('Orden eliminada exitosamente')
+      // Actualizar estado local
+      setOrdenes(ordenes.filter(orden => orden.id !== facturaId))
+      
+      // Recargar estadísticas
+      await cargarEstadisticas()
+      
+      alert('Factura eliminada correctamente')
     } catch (error) {
-      console.error('Error:', error)
-      alert('Error al eliminar la orden')
+      console.error('Error eliminando factura:', error)
+      alert('Error al eliminar la factura')
     }
   }
 
-  const editarOrden = (orden: Orden) => {
-    setOrdenEditando(orden)
-    setMostrarFormularioEdicion(true)
+  const editarFactura = (factura: Orden) => {
+    setFacturaEditando(factura)
+    setClienteNombre(factura.cliente_nombre || '')
+    setClienteTelefono(factura.cliente_telefono || '')
+    
+    // Convertir productos de la factura a formato de edición
+    const productosMap: {[key: string]: number} = {}
+    factura.productos.forEach(producto => {
+      productosMap[producto.id] = producto.cantidad
+    })
+    setProductosEditando(productosMap)
+    setMostrarModalEdicion(true)
   }
 
-  const guardarEdicion = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!ordenEditando) return
+  const guardarEdicionFactura = async () => {
+    if (!facturaEditando) return
 
     try {
-      const formData = new FormData(e.currentTarget as HTMLFormElement)
-      const cliente_nombre = formData.get('cliente_nombre') as string
-      const cliente_telefono = formData.get('cliente_telefono') as string
+      // Calcular nuevos productos y total
+      const productosActualizados = []
+      let nuevoTotal = 0
+
+      for (const [productoId, cantidad] of Object.entries(productosEditando)) {
+        if (cantidad > 0) {
+          const producto = productos.find(p => p.id === productoId)
+          if (producto) {
+            const precio = calcularPrecioProducto(producto)
+            const subtotal = precio * cantidad
+            productosActualizados.push({
+              id: productoId,
+              nombre: producto.nombre,
+              cantidad: cantidad,
+              precio: precio,
+              subtotal: subtotal
+            })
+            nuevoTotal += subtotal
+          }
+        }
+      }
+
+      const facturaActualizada = {
+        cliente_nombre: clienteNombre || undefined,
+        cliente_telefono: clienteTelefono || undefined,
+        productos: productosActualizados,
+        total: nuevoTotal,
+        updated_at: new Date().toISOString()
+      }
 
       const { error } = await supabase
         .from('ordenes')
-        .update({ 
-          cliente_nombre: cliente_nombre || undefined,
-          cliente_telefono: cliente_telefono || undefined
-        })
-        .eq('id', ordenEditando.id)
+        .update(facturaActualizada)
+        .eq('id', facturaEditando.id)
 
-      if (error) {
-        console.error('Error actualizando orden:', error)
-        alert('Error al actualizar la orden')
-        return
-      }
+      if (error) throw error
 
-      // Actualizar el estado local
+      // Actualizar estado local
       setOrdenes(ordenes.map(orden => 
-        orden.id === ordenEditando.id 
-          ? { ...orden, cliente_nombre: cliente_nombre || undefined, cliente_telefono: cliente_telefono || undefined }
+        orden.id === facturaEditando.id 
+          ? { ...orden, ...facturaActualizada }
           : orden
       ))
 
-      setMostrarFormularioEdicion(false)
-      setOrdenEditando(null)
-      alert('Orden actualizada exitosamente')
+      alert('Factura actualizada correctamente')
+      cerrarModalEdicion()
+      await cargarEstadisticas() // Recargar estadísticas
     } catch (error) {
-      console.error('Error:', error)
-      alert('Error al actualizar la orden')
+      console.error('Error actualizando factura:', error)
+      alert('Error al actualizar la factura')
     }
   }
 
-  const generarPDF = (orden: Orden) => {
-    const { jsPDF } = require('jspdf')
-    const doc = new jsPDF()
-
-    // Configuración del PDF
-    doc.setFont('helvetica')
-    
-    // Título
-    doc.setFontSize(20)
-    doc.setTextColor(139, 92, 246)
-    doc.text('M DESCARTABLES', 20, 30)
-    
-    doc.setFontSize(16)
-    doc.setTextColor(0, 0, 0)
-    doc.text('Orden de Pedido', 20, 45)
-    
-    // Línea separadora
-    doc.setDrawColor(139, 92, 246)
-    doc.setLineWidth(0.5)
-    doc.line(20, 50, 190, 50)
-    
-    // Información de la orden
-    doc.setFontSize(12)
-    doc.text(`ID de Orden: ${orden.id.substring(0, 8)}`, 20, 65)
-    doc.text(`Fecha: ${new Date(orden.created_at).toLocaleDateString('es-ES')}`, 20, 75)
-    doc.text(`Estado: ${orden.estado.toUpperCase()}`, 20, 85)
-    
-    if (orden.cliente_nombre) {
-      doc.text(`Cliente: ${orden.cliente_nombre}`, 20, 95)
-    }
-    if (orden.cliente_telefono) {
-      doc.text(`Teléfono: ${orden.cliente_telefono}`, 20, 105)
-    }
-    
-    // Productos
-    doc.setFontSize(14)
-    doc.text('Productos:', 20, 125)
-    
-    let yPosition = 135
-    orden.productos.forEach((producto, index) => {
-      doc.setFontSize(10)
-      doc.text(`${index + 1}. ${producto.nombre}`, 25, yPosition)
-      doc.text(`   Cantidad: ${producto.cantidad}`, 30, yPosition + 5)
-      doc.text(`   Precio unitario: $${producto.precio}`, 30, yPosition + 10)
-      doc.text(`   Subtotal: $${producto.subtotal.toFixed(2)}`, 30, yPosition + 15)
-      yPosition += 25
-    })
-    
-    // Total
-    doc.setFontSize(14)
-    doc.setTextColor(139, 92, 246)
-    doc.text(`TOTAL: $${orden.total.toFixed(2)}`, 20, yPosition + 10)
-    
-    // Pie de página
-    doc.setFontSize(8)
-    doc.setTextColor(100, 100, 100)
-    doc.text('Gracias por su pedido - M DESCARTABLES', 20, 280)
-    doc.text(`Generado el: ${new Date().toLocaleString('es-ES')}`, 20, 285)
-    
-    // Descargar el PDF
-    doc.save(`orden_${orden.id.substring(0, 8)}_${new Date().toISOString().split('T')[0]}.pdf`)
+  const cerrarModalEdicion = () => {
+    setMostrarModalEdicion(false)
+    setFacturaEditando(null)
+    setProductosEditando({})
+    setClienteNombre('')
+    setClienteTelefono('')
   }
 
-  const descargarOrdenes = () => {
-    const ordenesParaDescargar = ordenes.map((orden, index) => ({
-      '#': index + 1,
-      'ID': orden.id.substring(0, 8),
-      'Fecha': new Date(orden.created_at).toLocaleDateString('es-ES'),
-      'Cliente': orden.cliente_nombre || 'Sin nombre',
-      'Teléfono': orden.cliente_telefono || 'Sin teléfono',
-      'Productos': orden.productos.map(p => `${p.nombre} (x${p.cantidad})`).join(', '),
-      'Total': `$${orden.total}`,
-      'Estado': orden.estado
-    }))
+  const descargarFacturasCSV = () => {
+    try {
+      // Crear encabezados CSV
+      const headers = ['ID Factura', 'Fecha', 'Cliente', 'Teléfono', 'Productos', 'Total', 'Estado']
+      
+      // Convertir facturas a filas CSV
+      const filas = ordenes.map(orden => [
+        `"${orden.id.slice(-8).toUpperCase()}"`,
+        `"${new Date(orden.created_at).toLocaleDateString('es-ES')}"`,
+        `"${(orden.cliente_nombre || 'Cliente Anónimo').replace(/"/g, '""')}"`,
+        `"${(orden.cliente_telefono || '').replace(/"/g, '""')}"`,
+        `"${orden.productos.map(p => `${p.nombre} x${p.cantidad}`).join(', ').replace(/"/g, '""')}"`,
+        orden.total.toFixed(2),
+        `"${orden.estado.toUpperCase()}"`
+      ])
 
-    // Convertir a CSV
-    const headers = Object.keys(ordenesParaDescargar[0])
-    const csvContent = [
-      headers.join(','),
-      ...ordenesParaDescargar.map(row => 
-        headers.map(header => `"${row[header as keyof typeof row]}"`).join(',')
-      )
-    ].join('\n')
+      // Crear contenido CSV
+      const csvContent = [headers.join(','), ...filas.map(fila => fila.join(','))].join('\n')
 
     // Crear y descargar archivo
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+      const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' })
     const link = document.createElement('a')
     const url = URL.createObjectURL(blob)
     link.setAttribute('href', url)
-    link.setAttribute('download', `ordenes_m_descartables_${new Date().toISOString().split('T')[0]}.csv`)
+      link.setAttribute('download', `facturas-${new Date().toISOString().split('T')[0]}.csv`)
     link.style.visibility = 'hidden'
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
+      
+      alert('¡Facturas descargadas exitosamente!')
+    } catch (error) {
+      console.error('Error descargando CSV:', error)
+      alert('Error al descargar las facturas')
+    }
   }
 
-  const ordenesFiltradas = ordenes.filter(orden => 
-    !filtroEstado || orden.estado === filtroEstado
-  )
+  // Función para generar PDF de factura
+  const generarPDFFactura = async (factura: Orden) => {
+    try {
+      const jsPDF = (await import('jspdf')).default
+      const doc = new jsPDF()
 
-  if (authLoading) {
+      // Configuración del documento
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(20)
+      doc.text('FACTURA', 105, 30, { align: 'center' })
+
+      // Información de la empresa
+    doc.setFontSize(12)
+      doc.setFont('helvetica', 'normal')
+      doc.text('M DESCARTABLES', 20, 50)
+      doc.text('Fecha: ' + new Date(factura.created_at).toLocaleDateString('es-ES'), 20, 60)
+      doc.text('Factura #: ' + factura.id.slice(-8).toUpperCase(), 20, 70)
+
+      // Información del cliente
+      doc.setFont('helvetica', 'bold')
+      doc.text('CLIENTE:', 20, 90)
+      doc.setFont('helvetica', 'normal')
+      doc.text(factura.cliente_nombre || 'Cliente Anónimo', 20, 100)
+      if (factura.cliente_telefono) {
+        doc.text('Tel: ' + factura.cliente_telefono, 20, 110)
+      }
+
+      // Tabla de productos
+      doc.setFont('helvetica', 'bold')
+      doc.text('PRODUCTOS:', 20, 130)
+      
+      let yPosition = 140
+      doc.setFont('helvetica', 'normal')
+      
+      factura.productos.forEach((producto) => {
+        doc.text(`${producto.nombre} x${producto.cantidad}`, 20, yPosition)
+        doc.text(`$${producto.subtotal.toFixed(2)}`, 150, yPosition)
+        yPosition += 10
+    })
+    
+    // Total
+      doc.setFont('helvetica', 'bold')
+    doc.setFontSize(14)
+      doc.text('TOTAL: $' + factura.total.toFixed(2), 150, yPosition + 10)
+
+      // Estado
+      doc.setFontSize(12)
+      doc.text('Estado: ' + factura.estado.toUpperCase(), 20, yPosition + 20)
+
+      // Descargar
+      doc.save(`factura-${factura.id.slice(-8)}.pdf`)
+    } catch (error) {
+      console.error('Error generando PDF:', error)
+      alert('Error al generar el PDF')
+    }
+  }
+
+  // Función para compartir factura por WhatsApp
+  const compartirFacturaPorWhatsApp = async (factura: Orden) => {
+    try {
+      // Generar el PDF primero
+      await generarPDFFactura(factura)
+      
+      // Crear mensaje para WhatsApp
+      const mensaje = `🧾 *FACTURA #${factura.id.slice(-8).toUpperCase()}*\n\n` +
+        `📅 Fecha: ${new Date(factura.created_at).toLocaleDateString('es-ES')}\n` +
+        `👤 Cliente: ${factura.cliente_nombre || 'Cliente Anónimo'}\n` +
+        `💰 Total: $${factura.total.toFixed(2)}\n` +
+        `📋 Estado: ${factura.estado.toUpperCase()}\n\n` +
+        `*Productos:*\n` +
+        factura.productos.map(p => `• ${p.nombre} x${p.cantidad} - $${p.subtotal.toFixed(2)}`).join('\n') +
+        `\n\n_El PDF de esta factura se ha descargado automáticamente._`
+
+      // Abrir WhatsApp con el mensaje
+      const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(mensaje)}`
+      window.open(whatsappUrl, '_blank')
+      
+    } catch (error) {
+      console.error('Error compartiendo por WhatsApp:', error)
+      alert('Error al compartir por WhatsApp')
+    }
+  }
+
+  if (authLoading || loading) {
     return (
       <div style={{
         minHeight: '100vh',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        background: '#F9FAFB',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        fontFamily: 'Montserrat, sans-serif'
+        fontFamily: 'system-ui, -apple-system, sans-serif'
       }}>
-        <div style={{
-          background: 'rgba(255, 255, 255, 0.1)',
-          backdropFilter: 'blur(20px)',
-          borderRadius: '20px',
-          padding: '2rem',
-          border: '1px solid rgba(255, 255, 255, 0.2)',
-          textAlign: 'center'
-        }}>
+        <div style={{ textAlign: 'center' }}>
           <div style={{
-            fontSize: '1.2rem',
-            color: 'white',
-            marginBottom: '1rem'
+            width: '60px',
+            height: '60px',
+            border: '4px solid #E5E7EB',
+            borderTop: '4px solid #3B82F6',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite',
+            margin: '0 auto 1.5rem'
+          }}></div>
+          <h2 style={{
+            fontSize: '1.5rem',
+            fontWeight: '600',
+            color: '#111827',
+            marginBottom: '0.5rem'
           }}>
-            Verificando autenticación...
-          </div>
+            Cargando Facturas
+          </h2>
+          <p style={{
+            color: '#6B7280',
+            fontSize: '1rem',
+            margin: 0
+          }}>
+            Obteniendo datos de facturación...
+          </p>
         </div>
+        
+        {/* CSS para la animación de carga */}
+        <style jsx>{`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}</style>
       </div>
     )
   }
@@ -284,660 +607,832 @@ export default function AdminOrdenes() {
     return (
       <div style={{
         minHeight: '100vh',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontFamily: 'Montserrat, sans-serif'
-      }}>
-        <div style={{
-          background: 'rgba(255, 255, 255, 0.1)',
-          backdropFilter: 'blur(20px)',
-          borderRadius: '20px',
-          padding: '2rem',
-          border: '1px solid rgba(255, 255, 255, 0.2)',
-          textAlign: 'center'
-        }}>
-          <div style={{
-            fontSize: '1.2rem',
-            color: 'white',
-            marginBottom: '1rem'
-          }}>
-            Acceso no autorizado
-          </div>
-          <a href="/admin" style={{
-            color: 'white',
-            textDecoration: 'none',
-            background: 'rgba(255, 255, 255, 0.2)',
-            padding: '0.5rem 1rem',
-            borderRadius: '8px'
-          }}>
-            Ir al login
-          </a>
-        </div>
-      </div>
-    )
-  }
-
-  if (loading) {
-    return (
-      <div style={{
-        minHeight: '100vh',
         background: '#FFFFFF',
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'center'
+        justifyContent: 'center',
+        fontFamily: 'Arial, sans-serif'
       }}>
         <div style={{
-          textAlign: 'center',
-          padding: '2rem'
+          border: '2px solid #000000',
+          padding: '2rem',
+          background: '#FFFFFF',
+          color: '#000000',
+          fontSize: '1.2rem'
         }}>
-          <div style={{
-            width: '50px',
-            height: '50px',
-            border: '4px solid rgba(139, 92, 246, 0.1)',
-            borderTop: '4px solid #8B5CF6',
-            borderRadius: '50%',
-            animation: 'spin 1s linear infinite',
-            margin: '0 auto 1rem auto'
-          }}></div>
-          <p style={{
-            color: '#6B7280',
-            fontSize: '1.1rem',
-            fontWeight: '500'
-          }}>
-            Cargando órdenes...
-          </p>
+          Acceso denegado - Inicia sesión primero
         </div>
       </div>
     )
   }
 
-  return (
-    <div style={{
-      minHeight: '100vh',
-      background: '#FFFFFF',
-      padding: '100px 1rem 2rem 1rem'
+  const ordenesFiltradas = filtroEstado 
+    ? ordenes.filter(orden => orden.estado === filtroEstado)
+    : ordenes
+
+    return (
+      <div style={{
+        minHeight: '100vh',
+      background: '#F9FAFB',
+      padding: '100px 1rem 2rem 1rem',
+      fontFamily: 'system-ui, -apple-system, sans-serif'
     }}>
       <AdminNavbar />
-      <main style={{
-        maxWidth: '1200px',
-        margin: '0 auto',
-        opacity: isVisible ? 1 : 0,
-        transform: isVisible ? 'translateY(0)' : 'translateY(20px)',
-        transition: 'all 0.8s ease-out'
-      }}>
-        {/* Header */}
+      
+      <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+        {/* Estadísticas de Facturación */}
         <div style={{
-          textAlign: 'center',
-          marginBottom: '3rem'
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+          gap: '1.5rem',
+          marginBottom: '2rem',
+          opacity: isVisible ? 1 : 0,
+          transform: isVisible ? 'translateY(0)' : 'translateY(30px)',
+          transition: 'all 0.8s ease-out'
         }}>
-          <h1 style={{
-            fontSize: 'clamp(2.5rem, 6vw, 4rem)',
-            fontWeight: '800',
-            color: '#000000',
-            marginBottom: '1rem',
-            textShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
+          <div style={{
+            background: '#FFFFFF',
+            padding: '2rem',
+            borderRadius: '16px',
+            textAlign: 'center',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
+            border: '1px solid #E5E7EB'
           }}>
-            📋 Administración de Órdenes
-          </h1>
-          <p style={{
-            fontSize: 'clamp(1.1rem, 3vw, 1.25rem)',
-            color: '#6B7280',
-            maxWidth: '600px',
-            margin: '0 auto',
-            lineHeight: '1.6'
-          }}>
-            Gestiona todas las órdenes de productos descartables
+            <h3 style={{ color: '#6B7280', margin: '0 0 0.75rem 0', fontSize: '0.875rem', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Facturación Hoy
+            </h3>
+            <p style={{ color: '#111827', fontSize: '2.25rem', fontWeight: '700', margin: 0 }}>
+              ${estadisticas.facturacionDia.toFixed(2)}
+            </p>
+            <p style={{ color: '#9CA3AF', fontSize: '0.875rem', margin: '0.5rem 0 0 0' }}>
+              {estadisticas.ordenesHoy} órdenes
           </p>
         </div>
 
-        {/* Filtros y controles */}
+    <div style={{
+      background: '#FFFFFF',
+            padding: '2rem',
+            borderRadius: '16px',
+          textAlign: 'center',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
+            border: '1px solid #E5E7EB'
+          }}>
+            <h3 style={{ color: '#6B7280', margin: '0 0 0.75rem 0', fontSize: '0.875rem', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Facturación Este Mes
+            </h3>
+            <p style={{ color: '#111827', fontSize: '2.25rem', fontWeight: '700', margin: 0 }}>
+              ${estadisticas.facturacionMes.toFixed(2)}
+            </p>
+            <p style={{ color: '#9CA3AF', fontSize: '0.875rem', margin: '0.5rem 0 0 0' }}>
+              {estadisticas.ordenesMes} órdenes
+            </p>
+          </div>
+        </div>
+
+        {/* Header y Controles */}
         <div style={{
-          background: 'rgba(139, 92, 246, 0.05)',
-          borderRadius: '20px',
+          background: '#FFFFFF',
           padding: '2rem',
+          borderRadius: '16px',
           marginBottom: '2rem',
-          border: '1px solid rgba(139, 92, 246, 0.1)',
-          boxShadow: '0 20px 40px rgba(0, 0, 0, 0.05)'
+          opacity: isVisible ? 1 : 0,
+          transform: isVisible ? 'translateY(0)' : 'translateY(30px)',
+          transition: 'all 0.8s ease-out 0.2s',
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
+          border: '1px solid #E5E7EB'
         }}>
           <div style={{
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
+            marginBottom: '1.5rem',
             flexWrap: 'wrap',
             gap: '1rem'
           }}>
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '1rem'
+            <h1 style={{ 
+              color: '#111827', 
+              margin: 0,
+              fontSize: '1.875rem',
+              fontWeight: '700',
+              letterSpacing: '-0.025em'
             }}>
-              <label style={{
-                fontSize: '1rem',
-                fontWeight: '600',
-                color: '#374151'
-              }}>
-                Filtrar por estado:
-              </label>
-              <select
-                value={filtroEstado}
-                onChange={(e) => setFiltroEstado(e.target.value)}
-                style={{
-                  padding: '0.5rem 1rem',
-                  borderRadius: '8px',
-                  border: '1px solid #D1D5DB',
-                  background: '#FFFFFF',
-                  color: '#374151',
-                  fontSize: '1rem',
-                  fontWeight: '500',
-                  cursor: 'pointer'
-                }}
-              >
-                <option value="">Todas las órdenes</option>
-                <option value="pendiente">Pendientes</option>
-                <option value="vendida">Vendidas</option>
-                <option value="cancelada">Canceladas</option>
-              </select>
-            </div>
+              Gestión de Ventas
+            </h1>
 
             <button
-              onClick={descargarOrdenes}
-              style={{
-                background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+              onClick={() => setMostrarFormularioNuevaOrden(true)}
+                style={{
+                background: '#111827',
                 color: '#FFFFFF',
-                border: 'none',
+                border: '1px solid #111827',
                 padding: '0.75rem 1.5rem',
                 borderRadius: '12px',
-                fontSize: '1rem',
-                fontWeight: '700',
+                fontSize: '0.875rem',
+                  fontWeight: '500',
                 cursor: 'pointer',
-                transition: 'all 0.3s ease',
+                transition: 'all 0.2s ease',
+                boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.background = '#374151'
+                e.currentTarget.style.transform = 'translateY(-1px)'
+                e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.15)'
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.background = '#111827'
+                e.currentTarget.style.transform = 'translateY(0)'
+                e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.1)'
+              }}
+            >
+              + Crear Nueva Factura
+            </button>
+
+            <button
+              onClick={descargarFacturasCSV}
+              disabled={ordenes.length === 0}
+              style={{
+                background: ordenes.length === 0 ? '#9CA3AF' : '#3B82F6',
+                color: '#FFFFFF',
+                border: `1px solid ${ordenes.length === 0 ? '#9CA3AF' : '#3B82F6'}`,
+                padding: '0.75rem 1.5rem',
+                borderRadius: '12px',
+                fontSize: '0.875rem',
+                fontWeight: '500',
+                cursor: ordenes.length === 0 ? 'not-allowed' : 'pointer',
+                transition: 'all 0.2s ease',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.5rem',
-                boxShadow: '0 4px 15px rgba(16, 185, 129, 0.3)'
+                boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
               }}
               onMouseOver={(e) => {
-                e.currentTarget.style.transform = 'translateY(-2px) scale(1.05)'
-                e.currentTarget.style.boxShadow = '0 8px 25px rgba(16, 185, 129, 0.4)'
+                if (ordenes.length > 0) {
+                  e.currentTarget.style.background = '#2563EB'
+                  e.currentTarget.style.transform = 'translateY(-1px)'
+                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.15)'
+                }
               }}
               onMouseOut={(e) => {
-                e.currentTarget.style.transform = 'translateY(0) scale(1)'
-                e.currentTarget.style.boxShadow = '0 4px 15px rgba(16, 185, 129, 0.3)'
+                if (ordenes.length > 0) {
+                  e.currentTarget.style.background = '#3B82F6'
+                  e.currentTarget.style.transform = 'translateY(0)'
+                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.1)'
+                }
               }}
             >
-              📥 Descargar Órdenes
+              📥 Descargar CSV
             </button>
+          </div>
+
+          {/* Filtros */}
+          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+            <select
+              value={filtroEstado}
+              onChange={(e) => setFiltroEstado(e.target.value)}
+              style={{
+                padding: '0.75rem 1rem',
+                borderRadius: '8px',
+                border: '1px solid #D1D5DB',
+                background: '#FFFFFF',
+                color: '#374151',
+                fontSize: '0.875rem',
+                fontWeight: '400',
+                fontFamily: 'system-ui, -apple-system, sans-serif',
+                outline: 'none'
+              }}
+            >
+              <option value="">Todos los estados</option>
+              <option value="pendiente">Pendiente</option>
+              <option value="vendida">Pagada</option>
+              <option value="cancelada">Cancelada</option>
+            </select>
           </div>
         </div>
 
-        {/* Lista de órdenes */}
+        {/* Lista de Facturas */}
         <div style={{
           display: 'flex',
           flexDirection: 'column',
-          gap: '1rem'
+          gap: '1rem',
+          opacity: isVisible ? 1 : 0,
+          transform: isVisible ? 'translateY(0)' : 'translateY(30px)',
+          transition: 'all 0.8s ease-out 0.4s'
         }}>
-          {ordenesFiltradas.length === 0 ? (
-            <div style={{
-              textAlign: 'center',
-              padding: '3rem',
-              background: 'rgba(139, 92, 246, 0.05)',
-              borderRadius: '20px',
-              border: '1px solid rgba(139, 92, 246, 0.1)'
-            }}>
-              <h3 style={{
-                fontSize: '1.5rem',
-                fontWeight: '700',
-                color: '#000000',
-                marginBottom: '1rem'
-              }}>
-                No hay órdenes
-              </h3>
-              <p style={{
-                color: '#6B7280',
-                fontSize: '1.1rem'
-              }}>
-                {filtroEstado ? `No hay órdenes con estado "${filtroEstado}"` : 'No hay órdenes registradas'}
-              </p>
-            </div>
-          ) : (
-            ordenesFiltradas.map((orden, index) => (
-              <div
-                key={orden.id}
-                style={{
+          {ordenesFiltradas.map((orden, index) => (
+            <div key={orden.id} style={{
                   background: '#FFFFFF',
-                  borderRadius: '16px',
                   padding: '1.5rem',
-                  border: '1px solid rgba(139, 92, 246, 0.1)',
-                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
-                  transition: 'all 0.3s ease',
-                  opacity: isVisible ? 1 : 0,
-                  transform: isVisible ? 'translateY(0)' : 'translateY(20px)',
-                  animationDelay: `${index * 0.1}s`
-                }}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-2px)'
-                  e.currentTarget.style.boxShadow = '0 8px 25px rgba(0, 0, 0, 0.1)'
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)'
-                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.05)'
-                }}
-              >
-                <div style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'flex-start',
-                  marginBottom: '1rem',
-                  flexWrap: 'wrap',
-                  gap: '1rem'
-                }}>
+              borderRadius: '12px',
+              transition: `all 0.3s ease, all 1s ease-out ${0.1 * index}s`,
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)',
+              border: '1px solid #E5E7EB'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
                   <div>
-                    <h3 style={{
-                      fontSize: '1.2rem',
-                      fontWeight: '700',
-                      color: '#000000',
-                      marginBottom: '0.5rem'
-                    }}>
-                      Orden #{orden.id.substring(0, 8)}
+                  <h3 style={{ color: '#111827', margin: '0 0 0.5rem 0', fontWeight: '600', fontSize: '1.125rem' }}>
+                    {orden.cliente_nombre || 'Cliente Anónimo'}
                     </h3>
-                    <p style={{
-                      color: '#6B7280',
-                      fontSize: '0.9rem',
-                      marginBottom: '0.25rem'
-                    }}>
-                      📅 {new Date(orden.created_at).toLocaleDateString('es-ES', {
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
-                    </p>
-                    {orden.cliente_nombre && (
-                      <p style={{
-                        color: '#6B7280',
-                        fontSize: '0.9rem',
-                        marginBottom: '0.25rem'
-                      }}>
-                        👤 {orden.cliente_nombre}
-                      </p>
-                    )}
-                    {orden.cliente_telefono && (
-                      <p style={{
-                        color: '#6B7280',
-                        fontSize: '0.9rem'
-                      }}>
-                        📞 {orden.cliente_telefono}
-                      </p>
-                    )}
+                  <p style={{ color: '#6B7280', margin: 0, fontSize: '0.875rem' }}>
+                    {orden.cliente_telefono && `📱 ${orden.cliente_telefono}`}
+                  </p>
+                  <p style={{ color: '#6B7280', margin: '0.5rem 0', fontSize: '0.875rem' }}>
+                    📅 {new Date(orden.created_at).toLocaleDateString('es-ES')} - {new Date(orden.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                  </p>
                   </div>
 
+                <div style={{ textAlign: 'right' }}>
                   <div style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'flex-end',
-                    gap: '0.5rem'
+                    background: orden.estado === 'vendida' ? '#10B981' : 
+                               orden.estado === 'cancelada' ? '#EF4444' : '#F59E0B',
+                    color: '#FFFFFF',
+                    padding: '0.375rem 0.75rem',
+                    borderRadius: '20px',
+                    fontSize: '0.75rem',
+                    fontWeight: '500',
+                    marginBottom: '0.5rem',
+                    textTransform: 'capitalize'
                   }}>
-                    <span style={{
-                      fontSize: '1.5rem',
-                      fontWeight: '800',
-                      color: '#000000'
-                    }}>
-                      ${orden.total}
-                    </span>
-                    
-                    <div style={{
+                    {orden.estado}
+                  </div>
+                  <p style={{ color: '#111827', fontSize: '1.5rem', fontWeight: '700', margin: 0 }}>
+                    ${orden.total.toFixed(2)}
+                  </p>
+                </div>
+              </div>
+
+              {/* Productos */}
+              <div style={{ marginBottom: '1.5rem' }}>
+                <h4 style={{ color: '#374151', margin: '0 0 0.75rem 0', fontSize: '0.875rem', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Productos
+                </h4>
+                <div style={{ background: '#F9FAFB', padding: '1rem', borderRadius: '8px', border: '1px solid #E5E7EB' }}>
+                  {orden.productos.map((producto, idx) => (
+                    <div key={idx} style={{ 
+                      color: '#374151', 
+                      fontSize: '0.875rem',
+                      marginBottom: idx === orden.productos.length - 1 ? 0 : '0.5rem',
                       display: 'flex',
-                      gap: '0.5rem'
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
                     }}>
-                      <button
-                        onClick={() => actualizarEstadoOrden(orden.id, 'pendiente')}
-                        style={{
-                          background: orden.estado === 'pendiente' ? '#FEF3C7' : 'transparent',
-                          color: orden.estado === 'pendiente' ? '#92400E' : '#6B7280',
-                          border: '1px solid #F59E0B',
-                          padding: '0.5rem 1rem',
-                          borderRadius: '8px',
-                          fontSize: '0.8rem',
-                          fontWeight: '600',
-                          cursor: 'pointer',
-                          transition: 'all 0.2s ease'
-                        }}
-                      >
-                        ⏳ Pendiente
-                      </button>
-                      <button
-                        onClick={() => actualizarEstadoOrden(orden.id, 'vendida')}
-                        style={{
-                          background: orden.estado === 'vendida' ? '#D1FAE5' : 'transparent',
-                          color: orden.estado === 'vendida' ? '#065F46' : '#6B7280',
-                          border: '1px solid #10B981',
-                          padding: '0.5rem 1rem',
-                          borderRadius: '8px',
-                          fontSize: '0.8rem',
-                          fontWeight: '600',
-                          cursor: 'pointer',
-                          transition: 'all 0.2s ease'
-                        }}
-                      >
-                        ✅ Vendida
-                      </button>
-                      <button
-                        onClick={() => actualizarEstadoOrden(orden.id, 'cancelada')}
-                        style={{
-                          background: orden.estado === 'cancelada' ? '#FEE2E2' : 'transparent',
-                          color: orden.estado === 'cancelada' ? '#991B1B' : '#6B7280',
-                          border: '1px solid #EF4444',
-                          padding: '0.5rem 1rem',
-                          borderRadius: '8px',
-                          fontSize: '0.8rem',
-                          fontWeight: '600',
-                          cursor: 'pointer',
-                          transition: 'all 0.2s ease'
-                        }}
-                      >
-                        ❌ Cancelada
-                      </button>
+                      <span>{producto.nombre} <span style={{ color: '#6B7280' }}>x{producto.cantidad}</span></span>
+                      <span style={{ fontWeight: '600' }}>${producto.subtotal.toFixed(2)}</span>
                     </div>
+                  ))}
                   </div>
                 </div>
 
-                {/* Botones de Acción */}
+              {/* Botones de acción */}
+              <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                {orden.estado !== 'vendida' && (
+                      <button
+                    onClick={() => actualizarEstadoOrden(orden.id, 'vendida')}
+                        style={{
+                      background: '#10B981',
+                      color: '#FFFFFF',
+                      border: '1px solid #10B981',
+                          padding: '0.5rem 1rem',
+                          borderRadius: '8px',
+                      fontSize: '0.875rem',
+                      fontWeight: '500',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease',
+                          minWidth: '140px'
+                        }}
+                    onMouseOver={(e) => {
+                      e.currentTarget.style.background = '#059669'
+                    }}
+                    onMouseOut={(e) => {
+                      e.currentTarget.style.background = '#10B981'
+                    }}
+                  >
+                    ✓ Pagada
+                      </button>
+                )}
+                {orden.estado !== 'cancelada' && (
+                      <button
+                    onClick={() => actualizarEstadoOrden(orden.id, 'cancelada')}
+                        style={{
+                      background: '#FFFFFF',
+                      color: '#EF4444',
+                      border: '1px solid #EF4444',
+                          padding: '0.5rem 1rem',
+                          borderRadius: '8px',
+                      fontSize: '0.875rem',
+                      fontWeight: '500',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease',
+                          minWidth: '140px'
+                        }}
+                    onMouseOver={(e) => {
+                      e.currentTarget.style.background = '#EF4444'
+                      e.currentTarget.style.color = '#FFFFFF'
+                    }}
+                    onMouseOut={(e) => {
+                      e.currentTarget.style.background = '#FFFFFF'
+                      e.currentTarget.style.color = '#EF4444'
+                    }}
+                  >
+                    ✕ Cancelada
+                      </button>
+                )}
+                {orden.estado !== 'pendiente' && (
+                      <button
+                    onClick={() => actualizarEstadoOrden(orden.id, 'pendiente')}
+                        style={{
+                      background: '#FFFFFF',
+                      color: '#F59E0B',
+                      border: '1px solid #F59E0B',
+                          padding: '0.5rem 1rem',
+                          borderRadius: '8px',
+                      fontSize: '0.875rem',
+                      fontWeight: '500',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease',
+                          minWidth: '140px'
+                        }}
+                    onMouseOver={(e) => {
+                      e.currentTarget.style.background = '#F59E0B'
+                      e.currentTarget.style.color = '#FFFFFF'
+                    }}
+                    onMouseOut={(e) => {
+                      e.currentTarget.style.background = '#FFFFFF'
+                      e.currentTarget.style.color = '#F59E0B'
+                    }}
+                  >
+                    ↻ Pendiente
+                      </button>
+                )}
+
+                {/* Botones adicionales: Editar, Eliminar, PDF, WhatsApp */}
                 <div style={{
+                  borderTop: '1px solid #E5E7EB', 
+                  marginTop: '1rem', 
+                  paddingTop: '1rem',
                   display: 'flex',
-                  gap: '0.5rem',
-                  marginBottom: '1rem',
+                  gap: '0.75rem', 
                   flexWrap: 'wrap'
                 }}>
                   <button
-                    onClick={() => editarOrden(orden)}
+                    onClick={() => editarFactura(orden)}
                     style={{
-                      background: 'linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%)',
+                      background: '#F59E0B',
                       color: '#FFFFFF',
-                      border: 'none',
+                      border: '1px solid #F59E0B',
                       padding: '0.5rem 1rem',
                       borderRadius: '8px',
-                      fontSize: '0.8rem',
-                      fontWeight: '600',
+                      fontSize: '0.875rem',
+                      fontWeight: '500',
                       cursor: 'pointer',
                       transition: 'all 0.2s ease',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.25rem'
+                      minWidth: '140px'
                     }}
                     onMouseOver={(e) => {
-                      e.currentTarget.style.transform = 'translateY(-1px) scale(1.05)'
+                      e.currentTarget.style.background = '#D97706'
                     }}
                     onMouseOut={(e) => {
-                      e.currentTarget.style.transform = 'translateY(0) scale(1)'
+                      e.currentTarget.style.background = '#F59E0B'
                     }}
                   >
                     ✏️ Editar
                   </button>
                   
                   <button
-                    onClick={() => generarPDF(orden)}
+                    onClick={() => generarPDFFactura(orden)}
                     style={{
-                      background: 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)',
+                      background: '#6366F1',
                       color: '#FFFFFF',
-                      border: 'none',
+                      border: '1px solid #6366F1',
                       padding: '0.5rem 1rem',
                       borderRadius: '8px',
-                      fontSize: '0.8rem',
-                      fontWeight: '600',
+                      fontSize: '0.875rem',
+                      fontWeight: '500',
                       cursor: 'pointer',
                       transition: 'all 0.2s ease',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.25rem'
+                      minWidth: '140px'
                     }}
                     onMouseOver={(e) => {
-                      e.currentTarget.style.transform = 'translateY(-1px) scale(1.05)'
+                      e.currentTarget.style.background = '#4F46E5'
                     }}
                     onMouseOut={(e) => {
-                      e.currentTarget.style.transform = 'translateY(0) scale(1)'
+                      e.currentTarget.style.background = '#6366F1'
                     }}
                   >
-                    📄 PDF
+                    📄 Descargar PDF
                   </button>
                   
                   <button
-                    onClick={() => eliminarOrden(orden.id)}
+                    onClick={() => compartirFacturaPorWhatsApp(orden)}
                     style={{
-                      background: 'linear-gradient(135deg, #6B7280 0%, #4B5563 100%)',
+                      background: '#10B981',
                       color: '#FFFFFF',
-                      border: 'none',
+                      border: '1px solid #10B981',
                       padding: '0.5rem 1rem',
                       borderRadius: '8px',
-                      fontSize: '0.8rem',
-                      fontWeight: '600',
+                      fontSize: '0.875rem',
+                      fontWeight: '500',
                       cursor: 'pointer',
                       transition: 'all 0.2s ease',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.25rem'
+                      minWidth: '140px'
                     }}
                     onMouseOver={(e) => {
-                      e.currentTarget.style.transform = 'translateY(-1px) scale(1.05)'
+                      e.currentTarget.style.background = '#059669'
                     }}
                     onMouseOut={(e) => {
-                      e.currentTarget.style.transform = 'translateY(0) scale(1)'
+                      e.currentTarget.style.background = '#10B981'
+                    }}
+                  >
+                    📱 WhatsApp
+                  </button>
+                  
+                  <button
+                    onClick={() => eliminarFactura(orden.id)}
+                        style={{
+                          background: '#FFFFFF',
+                      color: '#DC2626',
+                      border: '1px solid #DC2626',
+                      padding: '0.5rem 1rem',
+                          borderRadius: '8px',
+                      fontSize: '0.875rem',
+                      fontWeight: '500',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      minWidth: '140px'
+                    }}
+                    onMouseOver={(e) => {
+                      e.currentTarget.style.background = '#DC2626'
+                      e.currentTarget.style.color = '#FFFFFF'
+                    }}
+                    onMouseOut={(e) => {
+                      e.currentTarget.style.background = '#FFFFFF'
+                      e.currentTarget.style.color = '#DC2626'
                     }}
                   >
                     🗑️ Eliminar
                   </button>
                 </div>
-
-                {/* Productos */}
-                <div style={{
-                  background: 'rgba(139, 92, 246, 0.05)',
-                  borderRadius: '12px',
-                  padding: '1rem',
-                  marginBottom: '1rem'
-                }}>
-                  <h4 style={{
-                    fontSize: '1rem',
-                    fontWeight: '700',
-                    color: '#000000',
-                    marginBottom: '0.75rem'
-                  }}>
-                    📦 Productos:
-                  </h4>
-                  <div style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '0.5rem'
-                  }}>
-                    {orden.productos.map((producto, idx) => (
-                      <div
-                        key={idx}
-                        style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          padding: '0.5rem',
-                          background: '#FFFFFF',
-                          borderRadius: '8px',
-                          border: '1px solid rgba(139, 92, 246, 0.1)'
-                        }}
-                      >
-                        <span style={{
-                          fontSize: '0.9rem',
-                          fontWeight: '500',
-                          color: '#374151'
-                        }}>
-                          {producto.nombre} (x{producto.cantidad})
-                        </span>
-                        <span style={{
-                          fontSize: '0.9rem',
-                          fontWeight: '700',
-                          color: '#000000'
-                        }}>
-                          ${producto.subtotal.toFixed(2)}
-                        </span>
-                      </div>
-                    ))}
                   </div>
                 </div>
+                    ))}
 
-                {/* Mensaje de WhatsApp */}
-                <details style={{
-                  background: 'rgba(139, 92, 246, 0.05)',
-                  borderRadius: '12px',
-                  padding: '1rem',
-                  border: '1px solid rgba(139, 92, 246, 0.1)'
-                }}>
-                  <summary style={{
-                    fontSize: '1rem',
-                    fontWeight: '700',
-                    color: '#000000',
-                    cursor: 'pointer',
-                    marginBottom: '0.5rem'
-                  }}>
-                    💬 Ver mensaje de WhatsApp
-                  </summary>
-                  <pre style={{
-                    fontSize: '0.8rem',
-                    color: '#6B7280',
-                    whiteSpace: 'pre-wrap',
-                    fontFamily: 'inherit',
+          {ordenesFiltradas.length === 0 && (
+                <div style={{
                     background: '#FFFFFF',
-                    padding: '0.75rem',
-                    borderRadius: '8px',
-                    border: '1px solid rgba(139, 92, 246, 0.1)',
-                    marginTop: '0.5rem'
-                  }}>
-                    {orden.mensaje_whatsapp}
-                  </pre>
-                </details>
+              padding: '4rem',
+              borderRadius: '16px',
+              textAlign: 'center',
+              color: '#6B7280',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
+              border: '1px solid #E5E7EB'
+            }}>
+              <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📭</div>
+              <h3 style={{ color: '#111827', margin: '0 0 1rem 0', fontSize: '1.25rem', fontWeight: '600' }}>
+                No hay facturas que mostrar
+              </h3>
+              <p style={{ margin: 0, color: '#6B7280' }}>
+                Crea tu primera factura usando el botón "Crear Nueva Factura"
+              </p>
               </div>
-            ))
           )}
         </div>
-      </main>
+                </div>
 
-      {/* Modal de Edición */}
-      {mostrarFormularioEdicion && ordenEditando && (
-        <div style={{
+      {/* Modal para crear nueva orden */}
+      {mostrarFormularioNuevaOrden && (
+                  <div style={{
           position: 'fixed',
           top: 0,
           left: 0,
           right: 0,
           bottom: 0,
           background: 'rgba(0, 0, 0, 0.8)',
-          display: 'flex',
-          alignItems: 'center',
+                    display: 'flex',
           justifyContent: 'center',
-          zIndex: 2000,
+          alignItems: 'center',
+          zIndex: 1000,
           padding: '1rem'
         }}>
           <div style={{
             background: '#FFFFFF',
-            padding: '2.5rem',
+            padding: '2rem',
             borderRadius: '20px',
-            maxWidth: '500px',
+            maxWidth: '800px',
             width: '100%',
-            boxShadow: '0 25px 50px rgba(0, 0, 0, 0.3)'
+            maxHeight: '90vh',
+            overflowY: 'auto',
+            boxShadow: '0 20px 40px rgba(0, 0, 0, 0.15)',
+            fontFamily: 'system-ui, -apple-system, sans-serif'
           }}>
-            <h3 style={{
-              fontSize: '1.5rem',
-              fontWeight: '700',
-              color: '#000000',
-              marginBottom: '1.5rem',
-              textAlign: 'center'
-            }}>
-              ✏️ Editar Orden
-            </h3>
-            
-            <form onSubmit={guardarEdicion}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h2 style={{ color: '#111827', margin: 0, fontWeight: '700', fontSize: '1.5rem' }}>
+                Crear Nueva Factura
+              </h2>
+              <button
+                onClick={() => {
+                  setMostrarFormularioNuevaOrden(false)
+                  setClienteNombre('')
+                  setClienteTelefono('')
+                  setProductosSeleccionados({})
+                  setListaSeleccionada('precio_base')
+                }}
+                        style={{
+                  background: '#F3F4F6',
+                  border: '1px solid #D1D5DB',
+                  color: '#6B7280',
+                  fontSize: '1.2rem',
+                  cursor: 'pointer',
+                  padding: '0.5rem',
+                  borderRadius: '8px',
+                  width: '40px',
+                  height: '40px',
+                          display: 'flex',
+                          alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.background = '#E5E7EB'
+                  e.currentTarget.style.color = '#374151'
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.background = '#F3F4F6'
+                  e.currentTarget.style.color = '#6B7280'
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Datos del cliente */}
               <div style={{ marginBottom: '1.5rem' }}>
-                <label style={{
-                  display: 'block',
-                  fontSize: '1rem',
-                  fontWeight: '600',
-                  color: '#374151',
-                  marginBottom: '0.5rem'
-                }}>
-                  Nombre del Cliente
-                </label>
+              <h3 style={{ 
+                color: '#111827', 
+                marginBottom: '1rem',
+                fontSize: '1.125rem',
+                fontWeight: '600'
+              }}>👤 Datos del Cliente</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem' }}>
                 <input
                   type="text"
-                  name="cliente_nombre"
-                  defaultValue={ordenEditando.cliente_nombre || ''}
-                  placeholder="Nombre del cliente"
+                  placeholder="Nombre del cliente *"
+                  value={clienteNombre}
+                  onChange={(e) => setClienteNombre(e.target.value)}
                   style={{
-                    width: '100%',
-                    padding: '0.75rem 1rem',
-                    borderRadius: '8px',
+                    padding: '0.75rem',
+                          borderRadius: '8px',
                     border: '1px solid #D1D5DB',
+                    background: '#F3F4F6',
+                    color: '#111827',
                     fontSize: '1rem',
                     outline: 'none',
-                    transition: 'border-color 0.3s ease'
+                    transition: 'border-color 0.2s ease',
+                    boxSizing: 'border-box'
                   }}
-                  onFocus={(e) => e.target.style.borderColor = '#8B5CF6'}
-                  onBlur={(e) => e.target.style.borderColor = '#D1D5DB'}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = '#3B82F6'
+                    e.target.style.background = '#FFFFFF'
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = '#D1D5DB'
+                    e.target.style.background = '#F3F4F6'
+                  }}
                 />
-              </div>
-              
-              <div style={{ marginBottom: '2rem' }}>
-                <label style={{
-                  display: 'block',
-                  fontSize: '1rem',
-                  fontWeight: '600',
-                  color: '#374151',
-                  marginBottom: '0.5rem'
-                }}>
-                  Teléfono del Cliente
-                </label>
                 <input
-                  type="tel"
-                  name="cliente_telefono"
-                  defaultValue={ordenEditando.cliente_telefono || ''}
-                  placeholder="Teléfono del cliente"
+                  type="text"
+                  placeholder="Teléfono (opcional)"
+                  value={clienteTelefono}
+                  onChange={(e) => setClienteTelefono(e.target.value)}
                   style={{
-                    width: '100%',
-                    padding: '0.75rem 1rem',
+                    padding: '0.75rem',
                     borderRadius: '8px',
                     border: '1px solid #D1D5DB',
+                    background: '#F3F4F6',
+                    color: '#111827',
                     fontSize: '1rem',
                     outline: 'none',
-                    transition: 'border-color 0.3s ease'
+                    transition: 'border-color 0.2s ease',
+                    boxSizing: 'border-box'
                   }}
-                  onFocus={(e) => e.target.style.borderColor = '#8B5CF6'}
-                  onBlur={(e) => e.target.style.borderColor = '#D1D5DB'}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = '#3B82F6'
+                    e.target.style.background = '#FFFFFF'
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = '#D1D5DB'
+                    e.target.style.background = '#F3F4F6'
+                  }}
                 />
               </div>
+              </div>
               
+            {/* Selección de lista de precios */}
+            <div style={{ marginBottom: '1.5rem' }}>
+              <h3 style={{ 
+                color: '#111827', 
+                marginBottom: '1rem',
+                fontSize: '1.125rem',
+                fontWeight: '600'
+              }}>💰 Lista de Precios</h3>
+              <select
+                value={listaSeleccionada}
+                onChange={(e) => setListaSeleccionada(e.target.value)}
+                style={{
+                  padding: '0.75rem',
+                  borderRadius: '8px',
+                  border: '1px solid #D1D5DB',
+                  background: '#F3F4F6',
+                  color: '#111827',
+                  fontSize: '1rem',
+                  width: '100%',
+                  outline: 'none',
+                  cursor: 'pointer',
+                  boxSizing: 'border-box'
+                }}
+                onFocus={(e) => {
+                  e.target.style.borderColor = '#3B82F6'
+                  e.target.style.background = '#FFFFFF'
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderColor = '#D1D5DB'
+                  e.target.style.background = '#F3F4F6'
+                }}
+              >
+                <option value="precio_base" style={{ background: '#FFFFFF', color: '#111827' }}>Precio Base</option>
+                {listasPrecios.map(lista => (
+                  <option key={lista.id} value={lista.id} style={{ background: '#FFFFFF', color: '#111827' }}>
+                    {lista.nombre} (+{lista.porcentaje_ganancia}% ganancia)
+                  </option>
+                ))}
+              </select>
+              </div>
+              
+            {/* Selección de productos */}
+            <div style={{ marginBottom: '1.5rem' }}>
+              <h3 style={{ 
+                color: '#111827', 
+                marginBottom: '1rem',
+                fontSize: '1.125rem',
+                fontWeight: '600'
+              }}>🛍️ Productos</h3>
               <div style={{
-                display: 'flex',
-                gap: '1rem'
+                maxHeight: '300px', 
+                overflowY: 'auto',
+                background: '#F8F9FA',
+                borderRadius: '8px',
+                padding: '1rem',
+                border: '1px solid #E5E7EB'
               }}>
+                {productos.map(producto => {
+                  const precio = calcularPrecioProducto(producto)
+                  const cantidad = productosSeleccionados[producto.id] || 0
+                  
+                  return (
+                    <div key={producto.id} style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                      padding: '0.75rem',
+                      background: cantidad > 0 ? '#E0F2FE' : '#FFFFFF',
+                          borderRadius: '8px',
+                      marginBottom: '0.5rem',
+                      border: cantidad > 0 ? '1px solid #0284C7' : '1px solid #E5E7EB',
+                      transition: 'all 0.2s ease'
+                    }}>
+                      <div>
+                        <div style={{ color: '#111827', fontWeight: '600', fontSize: '0.875rem' }}>{producto.nombre}</div>
+                        <div style={{ color: '#6B7280', fontSize: '0.75rem' }}>
+                          ${precio.toFixed(2)} {producto.categoria && `• ${producto.categoria}`}
+                        </div>
+                      </div>
+                      
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        {cantidad > 0 && (
+                          <>
                 <button
-                  type="button"
+                              onClick={() => actualizarCantidadProducto(producto.id, cantidad - 1)}
+                    style={{
+                                background: '#EF4444',
+                                color: '#FFFFFF',
+                      border: 'none',
+                                borderRadius: '4px',
+                                width: '24px',
+                                height: '24px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: '0.75rem'
+                              }}
+                            >
+                              -
+                  </button>
+                        <span style={{
+                              color: '#111827', 
+                              minWidth: '20px', 
+                              textAlign: 'center',
+                              fontSize: '0.875rem',
+                              fontWeight: '500'
+                            }}>
+                              {cantidad}
+                        </span>
+                  <button
+                              onClick={() => actualizarCantidadProducto(producto.id, cantidad + 1)}
+                  style={{
+                                background: '#10B981',
+                                color: '#FFFFFF',
+                      border: 'none',
+                                borderRadius: '4px',
+                                width: '24px',
+                                height: '24px',
+                    cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: '0.75rem'
+                              }}
+                            >
+                              +
+                  </button>
+                          </>
+                        )}
+                        
+                        {cantidad === 0 && (
+                          <button
+                            onClick={() => toggleProductoSeleccionado(producto.id)}
+                        style={{
+                              background: '#3B82F6',
+                              color: '#FFFFFF',
+                              border: 'none',
+                              padding: '0.5rem 1rem',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontSize: '0.75rem',
+                              fontWeight: '500'
+                            }}
+                          >
+                            Agregar
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+                  </div>
+                </div>
+
+            {/* Total y botones */}
+            {Object.keys(productosSeleccionados).length > 0 && (
+              <div style={{
+                background: '#F3F4F6',
+                  padding: '1rem',
+                    borderRadius: '8px',
+                marginBottom: '1rem',
+                border: '1px solid #E5E7EB'
+              }}>
+        <div style={{
+          display: 'flex',
+                  justifyContent: 'space-between', 
+          alignItems: 'center',
+                  color: '#111827',
+                  fontSize: '1.125rem',
+                  fontWeight: '600'
+                }}>
+                  <span>Total:</span>
+                  <span style={{ 
+                    color: '#111827',
+                    fontSize: '1.25rem',
+                    fontWeight: '700'
+                  }}>${calcularTotalOrden().toFixed(2)}</span>
+              </div>
+              </div>
+            )}
+              
+            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
+                <button
                   onClick={() => {
-                    setMostrarFormularioEdicion(false)
-                    setOrdenEditando(null)
+                  setMostrarFormularioNuevaOrden(false)
+                  setClienteNombre('')
+                  setClienteTelefono('')
+                  setProductosSeleccionados({})
+                  setListaSeleccionada('precio_base')
                   }}
                   style={{
-                    background: 'transparent',
-                    color: '#6B7280',
-                    border: '2px solid #E5E7EB',
+                    background: '#FFFFFF',
+                  color: '#6B7280',
+                  border: '1px solid #D1D5DB',
                     padding: '0.75rem 1.5rem',
                     borderRadius: '8px',
-                    fontSize: '1rem',
-                    fontWeight: '600',
-                    cursor: 'pointer',
-                    transition: 'all 0.3s ease',
-                    flex: 1
+                  cursor: 'pointer',
+                  fontSize: '0.875rem',
+                  fontWeight: '500',
+                  transition: 'all 0.2s ease'
                   }}
                   onMouseOver={(e) => {
-                    e.currentTarget.style.borderColor = '#D1D5DB'
+                    e.currentTarget.style.background = '#F3F4F6'
                     e.currentTarget.style.color = '#374151'
                   }}
                   onMouseOut={(e) => {
-                    e.currentTarget.style.borderColor = '#E5E7EB'
+                    e.currentTarget.style.background = '#FFFFFF'
                     e.currentTarget.style.color = '#6B7280'
                   }}
                 >
@@ -945,41 +1440,388 @@ export default function AdminOrdenes() {
                 </button>
                 
                 <button
-                  type="submit"
+                onClick={crearNuevaOrden}
+                disabled={!clienteNombre || Object.keys(productosSeleccionados).length === 0}
                   style={{
-                    background: 'linear-gradient(135deg, #8B5CF6 0%, #4C1D95 100%)',
+                  background: (!clienteNombre || Object.keys(productosSeleccionados).length === 0) 
+                    ? '#9CA3AF' 
+                    : '#10B981',
+                  color: '#FFFFFF',
+                    border: 'none',
+                    padding: '0.75rem 1.5rem',
+                  borderRadius: '8px',
+                  cursor: (!clienteNombre || Object.keys(productosSeleccionados).length === 0) 
+                    ? 'not-allowed' 
+                    : 'pointer',
+                  fontSize: '0.875rem',
+                  fontWeight: '500',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseOver={(e) => {
+                  if (clienteNombre && Object.keys(productosSeleccionados).length > 0) {
+                    e.currentTarget.style.background = '#059669'
+                  }
+                }}
+                onMouseOut={(e) => {
+                  if (clienteNombre && Object.keys(productosSeleccionados).length > 0) {
+                    e.currentTarget.style.background = '#10B981'
+                  }
+                }}
+              >
+                Crear Factura
+                </button>
+              </div>
+        </div>
+        </div>
+      )}
+
+      {/* Modal para editar factura */}
+      {mostrarModalEdicion && facturaEditando && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.6)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '1rem'
+        }}>
+          <div style={{
+            background: '#FFFFFF',
+            borderRadius: '20px',
+            padding: '2rem',
+            maxWidth: '800px',
+            width: '100%',
+            maxHeight: '90vh',
+            overflowY: 'auto',
+            boxShadow: '0 20px 40px rgba(0, 0, 0, 0.15)',
+            fontFamily: 'system-ui, -apple-system, sans-serif'
+          }}>
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center', 
+              marginBottom: '1.5rem' 
+            }}>
+              <h2 style={{ 
+                color: '#111827', 
+                margin: 0, 
+              fontWeight: '700',
+                fontSize: '1.5rem' 
+              }}>
+                Editar Factura #{facturaEditando.id.slice(-8).toUpperCase()}
+              </h2>
+              <button
+                onClick={cerrarModalEdicion}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '1.5rem',
+                  cursor: 'pointer',
+                  color: '#6B7280',
+                  padding: '0.5rem',
+                  borderRadius: '6px',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.background = '#F3F4F6'
+                  e.currentTarget.style.color = '#111827'
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.background = 'none'
+                  e.currentTarget.style.color = '#6B7280'
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Información del cliente */}
+            <div style={{ marginBottom: '2rem' }}>
+              <h3 style={{
+                fontSize: '1.125rem',
+                fontWeight: '600',
+                color: '#111827',
+                marginBottom: '1rem'
+              }}>
+                Información del Cliente
+            </h3>
+            
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: '1rem'
+              }}>
+                <div>
+                <label style={{
+                  display: 'block',
+                    fontSize: '0.875rem',
+                    fontWeight: '500',
+                  color: '#374151',
+                  marginBottom: '0.5rem'
+                }}>
+                  Nombre del Cliente
+                </label>
+                <input
+                  type="text"
+                    value={clienteNombre}
+                    onChange={(e) => setClienteNombre(e.target.value)}
+                    placeholder="Nombre del cliente (opcional)"
+                  style={{
+                    width: '100%',
+                      padding: '0.75rem',
+                    borderRadius: '8px',
+                    border: '1px solid #D1D5DB',
+                    fontSize: '1rem',
+                    outline: 'none',
+                      transition: 'border-color 0.2s ease',
+                      boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+              
+                <div>
+                <label style={{
+                  display: 'block',
+                    fontSize: '0.875rem',
+                    fontWeight: '500',
+                  color: '#374151',
+                  marginBottom: '0.5rem'
+                }}>
+                  Teléfono del Cliente
+                </label>
+                <input
+                    type="text"
+                    value={clienteTelefono}
+                    onChange={(e) => setClienteTelefono(e.target.value)}
+                    placeholder="Teléfono del cliente (opcional)"
+                  style={{
+                    width: '100%',
+                      padding: '0.75rem',
+                    borderRadius: '8px',
+                    border: '1px solid #D1D5DB',
+                    fontSize: '1rem',
+                    outline: 'none',
+                      transition: 'border-color 0.2s ease',
+                      boxSizing: 'border-box'
+                  }}
+                />
+                </div>
+              </div>
+              </div>
+
+            {/* Productos */}
+            <div style={{ marginBottom: '2rem' }}>
+              <h3 style={{
+                fontSize: '1.125rem',
+                fontWeight: '600',
+                color: '#111827',
+                marginBottom: '1rem'
+              }}>
+                Productos de la Factura
+              </h3>
+              
+              <div style={{
+                background: '#F8F9FA',
+                borderRadius: '8px',
+                padding: '1rem',
+                maxHeight: '300px',
+                overflowY: 'auto'
+              }}>
+                {productos.filter(p => p.publicado).map(producto => {
+                  const cantidad = productosEditando[producto.id] || 0
+                  const precio = calcularPrecioProducto(producto)
+                  
+                  return (
+                    <div key={producto.id} style={{
+                display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '0.75rem',
+                      marginBottom: '0.5rem',
+                      background: cantidad > 0 ? '#E0F2FE' : '#FFFFFF',
+                      borderRadius: '8px',
+                      border: cantidad > 0 ? '1px solid #0284C7' : '1px solid #E5E7EB'
+                    }}>
+                      <div style={{ flex: 1 }}>
+                        <h4 style={{
+                          fontSize: '0.875rem',
+                          fontWeight: '500',
+                          color: '#111827',
+                          margin: '0 0 0.25rem 0'
+                        }}>
+                          {producto.nombre}
+                        </h4>
+                        <p style={{
+                          fontSize: '0.75rem',
+                          color: '#6B7280',
+                          margin: 0
+                        }}>
+                          ${precio.toFixed(2)} c/u
+                        </p>
+                      </div>
+                      
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem'
+              }}>
+                <button
+                  onClick={() => {
+                            const newCantidad = Math.max(0, cantidad - 1)
+                            if (newCantidad === 0) {
+                              const { [producto.id]: _, ...rest } = productosEditando
+                              setProductosEditando(rest)
+                            } else {
+                              setProductosEditando({ ...productosEditando, [producto.id]: newCantidad })
+                            }
+                          }}
+                          disabled={cantidad === 0}
+                  style={{
+                            background: cantidad === 0 ? '#F3F4F6' : '#EF4444',
+                            color: cantidad === 0 ? '#9CA3AF' : '#FFFFFF',
+                            border: 'none',
+                            borderRadius: '4px',
+                            width: '24px',
+                            height: '24px',
+                            fontSize: '0.75rem',
+                            cursor: cantidad === 0 ? 'not-allowed' : 'pointer'
+                          }}
+                        >
+                          -
+                        </button>
+                        
+                        <span style={{
+                          minWidth: '20px',
+                          textAlign: 'center',
+                          fontSize: '0.875rem',
+                          fontWeight: '500'
+                        }}>
+                          {cantidad}
+                        </span>
+                        
+                        <button
+                          onClick={() => {
+                            setProductosEditando({ ...productosEditando, [producto.id]: cantidad + 1 })
+                          }}
+                          style={{
+                            background: '#10B981',
+                            color: '#FFFFFF',
+                            border: 'none',
+                            borderRadius: '4px',
+                            width: '24px',
+                            height: '24px',
+                            fontSize: '0.75rem',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Total */}
+            <div style={{
+              background: '#F3F4F6',
+              padding: '1rem',
+              borderRadius: '8px',
+              marginBottom: '1.5rem'
+            }}>
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}>
+                <span style={{
+                  fontSize: '1.125rem',
+                  fontWeight: '600',
+                  color: '#111827'
+                }}>
+                  Total:
+                </span>
+                <span style={{
+                  fontSize: '1.25rem',
+                  fontWeight: '700',
+                  color: '#111827'
+                }}>
+                  ${Object.entries(productosEditando).reduce((total, [productoId, cantidad]) => {
+                    const producto = productos.find(p => p.id === productoId)
+                    return total + (producto ? calcularPrecioProducto(producto) * cantidad : 0)
+                  }, 0).toFixed(2)}
+                </span>
+              </div>
+            </div>
+
+            {/* Botones */}
+            <div style={{
+              display: 'flex',
+              gap: '1rem',
+              justifyContent: 'flex-end'
+            }}>
+              <button
+                onClick={cerrarModalEdicion}
+                style={{
+                  background: '#FFFFFF',
+                    color: '#6B7280',
+                  border: '1px solid #D1D5DB',
+                    padding: '0.75rem 1.5rem',
+                    borderRadius: '8px',
+                  fontSize: '0.875rem',
+                  fontWeight: '500',
+                    cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                  }}
+                  onMouseOver={(e) => {
+                  e.currentTarget.style.background = '#F3F4F6'
+                    e.currentTarget.style.color = '#374151'
+                  }}
+                  onMouseOut={(e) => {
+                  e.currentTarget.style.background = '#FFFFFF'
+                    e.currentTarget.style.color = '#6B7280'
+                  }}
+                >
+                  Cancelar
+                </button>
+                
+                <button
+                onClick={guardarEdicionFactura}
+                disabled={Object.keys(productosEditando).length === 0}
+                  style={{
+                  background: Object.keys(productosEditando).length === 0 ? '#9CA3AF' : '#10B981',
                     color: '#FFFFFF',
                     border: 'none',
                     padding: '0.75rem 1.5rem',
                     borderRadius: '8px',
-                    fontSize: '1rem',
-                    fontWeight: '600',
-                    cursor: 'pointer',
-                    transition: 'all 0.3s ease',
-                    flex: 1
+                  fontSize: '0.875rem',
+                  fontWeight: '500',
+                  cursor: Object.keys(productosEditando).length === 0 ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.2s ease'
                   }}
                   onMouseOver={(e) => {
-                    e.currentTarget.style.transform = 'translateY(-1px)'
+                  if (Object.keys(productosEditando).length > 0) {
+                    e.currentTarget.style.background = '#059669'
+                  }
                   }}
                   onMouseOut={(e) => {
-                    e.currentTarget.style.transform = 'translateY(0)'
+                  if (Object.keys(productosEditando).length > 0) {
+                    e.currentTarget.style.background = '#10B981'
+                  }
                   }}
                 >
                   Guardar Cambios
                 </button>
               </div>
-            </form>
           </div>
         </div>
       )}
-
-      {/* CSS para animaciones */}
-      <style jsx>{`
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-      `}</style>
     </div>
   )
 }

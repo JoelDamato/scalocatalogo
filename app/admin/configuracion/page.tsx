@@ -11,13 +11,19 @@ import CloudinaryService from '../../../src/services/cloudinaryService'
 interface ConfiguracionSistema {
   id?: string
   logo_url: string
-  imagen_hero_url: string
   titulo_principal: string
   subtitulo_principal: string
   descripcion_empresa: string
   numero_whatsapp: string
   texto_boton_productos: string
   texto_boton_contacto: string
+  // Contenedores de la página de inicio
+  contenedor_envios_titulo: string
+  contenedor_envios_descripcion: string
+  contenedor_horarios_titulo: string
+  contenedor_horarios_descripcion: string
+  contenedor_quienes_somos_titulo: string
+  contenedor_quienes_somos_descripcion: string
   created_at?: string
   updated_at?: string
 }
@@ -28,18 +34,22 @@ export default function ConfiguracionPage() {
   const [isVisible, setIsVisible] = useState(false)
   const [configuracion, setConfiguracion] = useState<ConfiguracionSistema>({
     logo_url: '/logo.jpeg',
-    imagen_hero_url: '/hero-image.jpg',
     titulo_principal: 'Mi Tienda Online',
     subtitulo_principal: 'Los mejores productos para ti',
     descripcion_empresa: 'Somos una empresa dedicada a ofrecer productos de calidad al mejor precio.',
     numero_whatsapp: '+1234567890',
     texto_boton_productos: 'Ver Nuestros Productos',
-    texto_boton_contacto: 'Contactar'
+    texto_boton_contacto: 'Contactar',
+    // Valores por defecto para los contenedores
+    contenedor_envios_titulo: 'Envíos Rápidos',
+    contenedor_envios_descripcion: 'Realizamos envíos a todo el país con la mejor logística y en los tiempos más cortos posibles.',
+    contenedor_horarios_titulo: 'Horarios de Atención',
+    contenedor_horarios_descripcion: 'Lunes a Viernes: 9:00 AM - 6:00 PM\nSábados: 9:00 AM - 2:00 PM\nDomingos: Cerrado',
+    contenedor_quienes_somos_titulo: 'Quiénes Somos',
+    contenedor_quienes_somos_descripcion: 'Somos una empresa familiar con más de 10 años de experiencia, comprometidos con la calidad y satisfacción de nuestros clientes.'
   })
   const [archivoLogo, setArchivoLogo] = useState<File | null>(null)
-  const [archivoHero, setArchivoHero] = useState<File | null>(null)
   const [subiendoLogo, setSubiendoLogo] = useState(false)
-  const [subiendoHero, setSubiendoHero] = useState(false)
   const [guardando, setGuardando] = useState(false)
 
   useEffect(() => {
@@ -69,7 +79,7 @@ export default function ConfiguracionPage() {
     }
   }
 
-  const handleFileChange = (tipo: 'logo' | 'hero') => (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
       if (!file.type.startsWith('image/')) {
@@ -82,22 +92,13 @@ export default function ConfiguracionPage() {
         return
       }
       
-      if (tipo === 'logo') {
-        setArchivoLogo(file)
-      } else {
-        setArchivoHero(file)
-      }
+      setArchivoLogo(file)
     }
   }
 
-  const subirImagen = async (file: File, tipo: 'logo' | 'hero'): Promise<string | null> => {
+  const subirImagen = async (file: File): Promise<string | null> => {
     try {
-      if (tipo === 'logo') {
-        setSubiendoLogo(true)
-      } else {
-        setSubiendoHero(true)
-      }
-
+      setSubiendoLogo(true)
       const url = await CloudinaryService.uploadImage(file, 'configuracion')
       return url
     } catch (error) {
@@ -105,11 +106,7 @@ export default function ConfiguracionPage() {
       alert('Error al subir la imagen')
       return null
     } finally {
-      if (tipo === 'logo') {
-        setSubiendoLogo(false)
-      } else {
-        setSubiendoHero(false)
-      }
+      setSubiendoLogo(false)
     }
   }
 
@@ -118,28 +115,18 @@ export default function ConfiguracionPage() {
       setGuardando(true)
 
       let logoUrl = configuracion.logo_url
-      let heroUrl = configuracion.imagen_hero_url
 
       // Subir logo si hay archivo
       if (archivoLogo) {
-        const url = await subirImagen(archivoLogo, 'logo')
+        const url = await subirImagen(archivoLogo)
         if (url) {
           logoUrl = url
-        }
-      }
-
-      // Subir imagen hero si hay archivo
-      if (archivoHero) {
-        const url = await subirImagen(archivoHero, 'hero')
-        if (url) {
-          heroUrl = url
         }
       }
 
       const configuracionData = {
         ...configuracion,
         logo_url: logoUrl,
-        imagen_hero_url: heroUrl,
         updated_at: new Date().toISOString()
       }
 
@@ -158,7 +145,6 @@ export default function ConfiguracionPage() {
 
       alert('Configuración guardada exitosamente')
       setArchivoLogo(null)
-      setArchivoHero(null)
       
       // Recargar configuración
       await cargarConfiguracion()
@@ -174,23 +160,22 @@ export default function ConfiguracionPage() {
     return (
       <div style={{
         minHeight: '100vh',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        background: '#F9FAFB',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        fontFamily: 'Montserrat, sans-serif'
+        fontFamily: 'system-ui, -apple-system, sans-serif'
       }}>
         <div style={{
-          background: 'rgba(255, 255, 255, 0.1)',
-          backdropFilter: 'blur(20px)',
-          borderRadius: '20px',
+          background: '#FFFFFF',
+          borderRadius: '12px',
           padding: '2rem',
-          border: '1px solid rgba(255, 255, 255, 0.2)',
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
           textAlign: 'center'
         }}>
           <div style={{
             fontSize: '1.2rem',
-            color: 'white',
+            color: '#111827',
             marginBottom: '1rem'
           }}>
             Verificando autenticación...
@@ -207,9 +192,9 @@ export default function ConfiguracionPage() {
   return (
     <div style={{
       minHeight: '100vh',
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      background: '#F9FAFB',
       padding: '100px 1rem 2rem 1rem',
-      fontFamily: 'Montserrat, sans-serif'
+      fontFamily: 'system-ui, -apple-system, sans-serif'
     }}>
       <AdminNavbar />
       
@@ -221,135 +206,76 @@ export default function ConfiguracionPage() {
         transition: 'all 0.6s ease'
       }}>
         <div style={{
-          background: 'rgba(255, 255, 255, 0.1)',
-          backdropFilter: 'blur(20px)',
-          borderRadius: '20px',
+          background: '#FFFFFF',
+          borderRadius: '16px',
           padding: '2rem',
-          border: '1px solid rgba(255, 255, 255, 0.2)',
-          boxShadow: '0 20px 40px rgba(0, 0, 0, 0.1)'
+          border: '1px solid #E5E7EB',
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)'
         }}>
           <h1 style={{
-            fontSize: '2.5rem',
+            fontSize: '1.875rem',
             fontWeight: '700',
-            color: 'white',
+            color: '#111827',
             textAlign: 'center',
             marginBottom: '2rem',
-            textShadow: '0 4px 20px rgba(0, 0, 0, 0.3)'
+            letterSpacing: '-0.025em'
           }}>
-            ⚙️ Configuración del Sistema
+            Configuración del Sistema
           </h1>
 
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
-            gap: '2rem',
-            marginBottom: '2rem'
-          }}>
-            {/* Logo */}
-            <div>
-              <h3 style={{
-                fontSize: '1.2rem',
-                fontWeight: '600',
-                color: 'rgba(255, 255, 255, 0.9)',
-                marginBottom: '1rem'
+          {/* Logo */}
+          <div style={{ marginBottom: '2rem' }}>
+            <h3 style={{
+              fontSize: '1.125rem',
+              fontWeight: '600',
+              color: '#111827',
+              marginBottom: '1rem'
+            }}>
+              Logo de la Empresa
+            </h3>
+            
+            {configuracion.logo_url && (
+              <div style={{
+                marginBottom: '1rem',
+                textAlign: 'center'
               }}>
-                🖼️ Logo de la Empresa
-              </h3>
-              
-              {configuracion.logo_url && (
-                <div style={{
-                  marginBottom: '1rem',
-                  textAlign: 'center'
-                }}>
-                  <img 
-                    src={configuracion.logo_url} 
-                    alt="Logo actual"
-                    style={{
-                      maxWidth: '200px',
-                      maxHeight: '100px',
-                      objectFit: 'contain',
-                      borderRadius: '10px',
-                      border: '2px solid rgba(255, 255, 255, 0.3)'
-                    }}
-                  />
-                </div>
-              )}
+                <img 
+                  src={configuracion.logo_url} 
+                  alt="Logo actual"
+                  style={{
+                    maxWidth: '200px',
+                    maxHeight: '100px',
+                    objectFit: 'contain',
+                    borderRadius: '8px',
+                    border: '1px solid #E5E7EB'
+                  }}
+                />
+              </div>
+            )}
 
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleFileChange('logo')}
-                style={{
-                  width: '100%',
-                  padding: '0.75rem',
-                  borderRadius: '10px',
-                  border: '1px solid rgba(255, 255, 255, 0.3)',
-                  background: 'rgba(255, 255, 255, 0.1)',
-                  color: 'white',
-                  fontSize: '0.9rem',
-                  marginBottom: '0.5rem'
-                }}
-              />
-              
-              {subiendoLogo && (
-                <p style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.8rem' }}>
-                  Subiendo logo...
-                </p>
-              )}
-            </div>
-
-            {/* Imagen Hero */}
-            <div>
-              <h3 style={{
-                fontSize: '1.2rem',
-                fontWeight: '600',
-                color: 'rgba(255, 255, 255, 0.9)',
-                marginBottom: '1rem'
-              }}>
-                🎨 Imagen Principal
-              </h3>
-              
-              {configuracion.imagen_hero_url && (
-                <div style={{
-                  marginBottom: '1rem',
-                  textAlign: 'center'
-                }}>
-                  <img 
-                    src={configuracion.imagen_hero_url} 
-                    alt="Imagen hero actual"
-                    style={{
-                      maxWidth: '200px',
-                      maxHeight: '150px',
-                      objectFit: 'cover',
-                      borderRadius: '10px',
-                      border: '2px solid rgba(255, 255, 255, 0.3)'
-                    }}
-                  />
-                </div>
-              )}
-
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleFileChange('hero')}
-                style={{
-                  width: '100%',
-                  padding: '0.75rem',
-                  borderRadius: '10px',
-                  border: '1px solid rgba(255, 255, 255, 0.3)',
-                  background: 'rgba(255, 255, 255, 0.1)',
-                  color: 'white',
-                  fontSize: '0.9rem',
-                  marginBottom: '0.5rem'
-                }}
-              />
-              
-              {subiendoHero && (
-                <p style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '0.8rem' }}>
-                  Subiendo imagen...
-                </p>
-              )}
-            </div>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleFileChange}
+              style={{
+                width: '100%',
+                padding: '0.75rem',
+                borderRadius: '8px',
+                border: '1px solid #D1D5DB',
+                background: '#F3F4F6',
+                color: '#111827',
+                outline: 'none',
+                boxSizing: 'border-box',
+                fontSize: '0.9rem',
+                marginBottom: '0.5rem'
+              }}
+            />
+            
+            {subiendoLogo && (
+              <p style={{ color: '#6B7280', fontSize: '0.8rem' }}>
+                Subiendo logo...
+              </p>
+            )}
           </div>
 
           {/* Textos */}
@@ -364,7 +290,7 @@ export default function ConfiguracionPage() {
                 display: 'block',
                 fontSize: '0.9rem',
                 fontWeight: '600',
-                color: 'rgba(255, 255, 255, 0.9)',
+                color: '#111827',
                 marginBottom: '0.5rem'
               }}>
                 Título Principal
@@ -376,10 +302,12 @@ export default function ConfiguracionPage() {
                 style={{
                   width: '100%',
                   padding: '0.75rem',
-                  borderRadius: '10px',
-                  border: '1px solid rgba(255, 255, 255, 0.3)',
-                  background: 'rgba(255, 255, 255, 0.1)',
-                  color: 'white',
+                  borderRadius: '8px',
+                  border: '1px solid #D1D5DB',
+                  background: '#F3F4F6',
+                  color: '#111827',
+                  outline: 'none',
+                  boxSizing: 'border-box',
                   fontSize: '1rem'
                 }}
               />
@@ -390,7 +318,7 @@ export default function ConfiguracionPage() {
                 display: 'block',
                 fontSize: '0.9rem',
                 fontWeight: '600',
-                color: 'rgba(255, 255, 255, 0.9)',
+                color: '#111827',
                 marginBottom: '0.5rem'
               }}>
                 Subtítulo
@@ -402,10 +330,12 @@ export default function ConfiguracionPage() {
                 style={{
                   width: '100%',
                   padding: '0.75rem',
-                  borderRadius: '10px',
-                  border: '1px solid rgba(255, 255, 255, 0.3)',
-                  background: 'rgba(255, 255, 255, 0.1)',
-                  color: 'white',
+                  borderRadius: '8px',
+                  border: '1px solid #D1D5DB',
+                  background: '#F3F4F6',
+                  color: '#111827',
+                  outline: 'none',
+                  boxSizing: 'border-box',
                   fontSize: '1rem'
                 }}
               />
@@ -416,7 +346,7 @@ export default function ConfiguracionPage() {
                 display: 'block',
                 fontSize: '0.9rem',
                 fontWeight: '600',
-                color: 'rgba(255, 255, 255, 0.9)',
+                color: '#111827',
                 marginBottom: '0.5rem'
               }}>
                 Número de WhatsApp
@@ -429,10 +359,12 @@ export default function ConfiguracionPage() {
                 style={{
                   width: '100%',
                   padding: '0.75rem',
-                  borderRadius: '10px',
-                  border: '1px solid rgba(255, 255, 255, 0.3)',
-                  background: 'rgba(255, 255, 255, 0.1)',
-                  color: 'white',
+                  borderRadius: '8px',
+                  border: '1px solid #D1D5DB',
+                  background: '#F3F4F6',
+                  color: '#111827',
+                  outline: 'none',
+                  boxSizing: 'border-box',
                   fontSize: '1rem'
                 }}
               />
@@ -443,7 +375,7 @@ export default function ConfiguracionPage() {
                 display: 'block',
                 fontSize: '0.9rem',
                 fontWeight: '600',
-                color: 'rgba(255, 255, 255, 0.9)',
+                color: '#111827',
                 marginBottom: '0.5rem'
               }}>
                 Texto Botón Productos
@@ -455,10 +387,12 @@ export default function ConfiguracionPage() {
                 style={{
                   width: '100%',
                   padding: '0.75rem',
-                  borderRadius: '10px',
-                  border: '1px solid rgba(255, 255, 255, 0.3)',
-                  background: 'rgba(255, 255, 255, 0.1)',
-                  color: 'white',
+                  borderRadius: '8px',
+                  border: '1px solid #D1D5DB',
+                  background: '#F3F4F6',
+                  color: '#111827',
+                  outline: 'none',
+                  boxSizing: 'border-box',
                   fontSize: '1rem'
                 }}
               />
@@ -469,7 +403,7 @@ export default function ConfiguracionPage() {
                 display: 'block',
                 fontSize: '0.9rem',
                 fontWeight: '600',
-                color: 'rgba(255, 255, 255, 0.9)',
+                color: '#111827',
                 marginBottom: '0.5rem'
               }}>
                 Texto Botón Contacto
@@ -481,10 +415,12 @@ export default function ConfiguracionPage() {
                 style={{
                   width: '100%',
                   padding: '0.75rem',
-                  borderRadius: '10px',
-                  border: '1px solid rgba(255, 255, 255, 0.3)',
-                  background: 'rgba(255, 255, 255, 0.1)',
-                  color: 'white',
+                  borderRadius: '8px',
+                  border: '1px solid #D1D5DB',
+                  background: '#F3F4F6',
+                  color: '#111827',
+                  outline: 'none',
+                  boxSizing: 'border-box',
                   fontSize: '1rem'
                 }}
               />
@@ -497,7 +433,7 @@ export default function ConfiguracionPage() {
               display: 'block',
               fontSize: '0.9rem',
               fontWeight: '600',
-              color: 'rgba(255, 255, 255, 0.9)',
+              color: '#111827',
               marginBottom: '0.5rem'
             }}>
               Descripción de la Empresa
@@ -505,18 +441,275 @@ export default function ConfiguracionPage() {
             <textarea
               value={configuracion.descripcion_empresa}
               onChange={(e) => setConfiguracion({...configuracion, descripcion_empresa: e.target.value})}
+              placeholder="Describe tu empresa, productos o servicios..."
               rows={4}
               style={{
                 width: '100%',
                 padding: '0.75rem',
-                borderRadius: '10px',
-                border: '1px solid rgba(255, 255, 255, 0.3)',
-                background: 'rgba(255, 255, 255, 0.1)',
-                color: 'white',
+                borderRadius: '8px',
+                border: '1px solid #D1D5DB',
+                background: '#F3F4F6',
+                color: '#111827',
                 fontSize: '1rem',
-                resize: 'vertical'
+                resize: 'vertical',
+                fontFamily: 'system-ui, -apple-system, sans-serif',
+                outline: 'none',
+                boxSizing: 'border-box'
               }}
             />
+          </div>
+
+          {/* Contenedores de la página de inicio */}
+          <div style={{ marginBottom: '2rem' }}>
+            <h2 style={{
+              fontSize: '1.5rem',
+              fontWeight: '700',
+              color: '#111827',
+              marginBottom: '1.5rem',
+              textAlign: 'center'
+            }}>
+              Contenedores de la Página de Inicio
+            </h2>
+
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))',
+              gap: '2rem'
+            }}>
+              {/* Contenedor Envíos */}
+              <div style={{
+                background: '#F8F9FA',
+                padding: '1.5rem',
+                borderRadius: '12px',
+                border: '1px solid #E5E7EB'
+              }}>
+                <h3 style={{
+                  fontSize: '1.125rem',
+                  fontWeight: '600',
+                  color: '#111827',
+                  marginBottom: '1rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem'
+                }}>
+                  🚚 Envíos
+                </h3>
+                
+                <div style={{ marginBottom: '1rem' }}>
+                  <label style={{
+                    display: 'block',
+                    fontSize: '0.875rem',
+                    fontWeight: '500',
+                    color: '#374151',
+                    marginBottom: '0.5rem'
+                  }}>
+                    Título
+                  </label>
+                  <input
+                    type="text"
+                    value={configuracion.contenedor_envios_titulo}
+                    onChange={(e) => setConfiguracion({...configuracion, contenedor_envios_titulo: e.target.value})}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      borderRadius: '8px',
+                      border: '1px solid #D1D5DB',
+                      background: '#FFFFFF',
+                      color: '#111827',
+                      fontSize: '0.875rem',
+                      outline: 'none',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{
+                    display: 'block',
+                    fontSize: '0.875rem',
+                    fontWeight: '500',
+                    color: '#374151',
+                    marginBottom: '0.5rem'
+                  }}>
+                    Descripción
+                  </label>
+                  <textarea
+                    value={configuracion.contenedor_envios_descripcion}
+                    onChange={(e) => setConfiguracion({...configuracion, contenedor_envios_descripcion: e.target.value})}
+                    rows={3}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      borderRadius: '8px',
+                      border: '1px solid #D1D5DB',
+                      background: '#FFFFFF',
+                      color: '#111827',
+                      fontSize: '0.875rem',
+                      resize: 'vertical',
+                      fontFamily: 'system-ui, -apple-system, sans-serif',
+                      outline: 'none',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Contenedor Horarios */}
+              <div style={{
+                background: '#F8F9FA',
+                padding: '1.5rem',
+                borderRadius: '12px',
+                border: '1px solid #E5E7EB'
+              }}>
+                <h3 style={{
+                  fontSize: '1.125rem',
+                  fontWeight: '600',
+                  color: '#111827',
+                  marginBottom: '1rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem'
+                }}>
+                  🕒 Horarios
+                </h3>
+                
+                <div style={{ marginBottom: '1rem' }}>
+                  <label style={{
+                    display: 'block',
+                    fontSize: '0.875rem',
+                    fontWeight: '500',
+                    color: '#374151',
+                    marginBottom: '0.5rem'
+                  }}>
+                    Título
+                  </label>
+                  <input
+                    type="text"
+                    value={configuracion.contenedor_horarios_titulo}
+                    onChange={(e) => setConfiguracion({...configuracion, contenedor_horarios_titulo: e.target.value})}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      borderRadius: '8px',
+                      border: '1px solid #D1D5DB',
+                      background: '#FFFFFF',
+                      color: '#111827',
+                      fontSize: '0.875rem',
+                      outline: 'none',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{
+                    display: 'block',
+                    fontSize: '0.875rem',
+                    fontWeight: '500',
+                    color: '#374151',
+                    marginBottom: '0.5rem'
+                  }}>
+                    Descripción
+                  </label>
+                  <textarea
+                    value={configuracion.contenedor_horarios_descripcion}
+                    onChange={(e) => setConfiguracion({...configuracion, contenedor_horarios_descripcion: e.target.value})}
+                    rows={3}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      borderRadius: '8px',
+                      border: '1px solid #D1D5DB',
+                      background: '#FFFFFF',
+                      color: '#111827',
+                      fontSize: '0.875rem',
+                      resize: 'vertical',
+                      fontFamily: 'system-ui, -apple-system, sans-serif',
+                      outline: 'none',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Contenedor Quiénes Somos */}
+              <div style={{
+                background: '#F8F9FA',
+                padding: '1.5rem',
+                borderRadius: '12px',
+                border: '1px solid #E5E7EB'
+              }}>
+                <h3 style={{
+                  fontSize: '1.125rem',
+                  fontWeight: '600',
+                  color: '#111827',
+                  marginBottom: '1rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem'
+                }}>
+                  👥 Quiénes Somos
+                </h3>
+                
+                <div style={{ marginBottom: '1rem' }}>
+                  <label style={{
+                    display: 'block',
+                    fontSize: '0.875rem',
+                    fontWeight: '500',
+                    color: '#374151',
+                    marginBottom: '0.5rem'
+                  }}>
+                    Título
+                  </label>
+                  <input
+                    type="text"
+                    value={configuracion.contenedor_quienes_somos_titulo}
+                    onChange={(e) => setConfiguracion({...configuracion, contenedor_quienes_somos_titulo: e.target.value})}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      borderRadius: '8px',
+                      border: '1px solid #D1D5DB',
+                      background: '#FFFFFF',
+                      color: '#111827',
+                      fontSize: '0.875rem',
+                      outline: 'none',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{
+                    display: 'block',
+                    fontSize: '0.875rem',
+                    fontWeight: '500',
+                    color: '#374151',
+                    marginBottom: '0.5rem'
+                  }}>
+                    Descripción
+                  </label>
+                  <textarea
+                    value={configuracion.contenedor_quienes_somos_descripcion}
+                    onChange={(e) => setConfiguracion({...configuracion, contenedor_quienes_somos_descripcion: e.target.value})}
+                    rows={3}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      borderRadius: '8px',
+                      border: '1px solid #D1D5DB',
+                      background: '#FFFFFF',
+                      color: '#111827',
+                      fontSize: '0.875rem',
+                      resize: 'vertical',
+                      fontFamily: 'system-ui, -apple-system, sans-serif',
+                      outline: 'none',
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Botón guardar */}
@@ -525,32 +718,33 @@ export default function ConfiguracionPage() {
               onClick={guardarConfiguracion}
               disabled={guardando}
               style={{
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                color: 'white',
+                background: guardando ? '#9CA3AF' : '#111827',
+                color: '#FFFFFF',
                 border: 'none',
                 padding: '1rem 2rem',
-                borderRadius: '15px',
-                fontSize: '1.1rem',
-                fontWeight: '600',
+                borderRadius: '8px',
+                fontSize: '1rem',
+                fontWeight: '500',
                 cursor: guardando ? 'not-allowed' : 'pointer',
-                opacity: guardando ? 0.7 : 1,
-                transition: 'all 0.3s ease',
-                boxShadow: '0 10px 30px rgba(0, 0, 0, 0.2)'
+                transition: 'all 0.2s ease',
+                boxShadow: guardando ? 'none' : '0 2px 4px rgba(0, 0, 0, 0.1)'
               }}
               onMouseOver={(e) => {
                 if (!guardando) {
-                  e.currentTarget.style.transform = 'translateY(-2px)'
-                  e.currentTarget.style.boxShadow = '0 15px 40px rgba(0, 0, 0, 0.3)'
+                  e.currentTarget.style.background = '#374151'
+                  e.currentTarget.style.transform = 'translateY(-1px)'
+                  e.currentTarget.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.15)'
                 }
               }}
               onMouseOut={(e) => {
                 if (!guardando) {
+                  e.currentTarget.style.background = '#111827'
                   e.currentTarget.style.transform = 'translateY(0)'
-                  e.currentTarget.style.boxShadow = '0 10px 30px rgba(0, 0, 0, 0.2)'
+                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.1)'
                 }
               }}
             >
-              {guardando ? '💾 Guardando...' : '💾 Guardar Configuración'}
+              {guardando ? 'Guardando...' : 'Guardar Configuración'}
             </button>
           </div>
         </div>

@@ -11,7 +11,7 @@ interface ListaPrecios {
   id: string
   nombre: string
   descripcion: string | null
-  porcentaje_descuento: number
+  porcentaje_ganancia: number
   activa: boolean
   url_personalizada: string
   created_at: string
@@ -28,7 +28,7 @@ export default function ListasPreciosPage() {
   const [formData, setFormData] = useState({
     nombre: '',
     descripcion: '',
-    porcentaje_descuento: 0,
+    porcentaje_ganancia: 50, // 50% por defecto
     activa: true
   })
 
@@ -86,7 +86,7 @@ export default function ListasPreciosPage() {
       const listaData = {
         nombre: formData.nombre.trim(),
         descripcion: formData.descripcion.trim() || null,
-        porcentaje_descuento: formData.porcentaje_descuento,
+        porcentaje_ganancia: formData.porcentaje_ganancia,
         activa: formData.activa,
         url_personalizada: urlPersonalizada
       }
@@ -119,7 +119,7 @@ export default function ListasPreciosPage() {
       setFormData({
         nombre: '',
         descripcion: '',
-        porcentaje_descuento: 0,
+        porcentaje_ganancia: 50,
         activa: true
       })
       await cargarListas()
@@ -134,7 +134,7 @@ export default function ListasPreciosPage() {
     setFormData({
       nombre: lista.nombre,
       descripcion: lista.descripcion || '',
-      porcentaje_descuento: lista.porcentaje_descuento,
+      porcentaje_ganancia: lista.porcentaje_ganancia,
       activa: lista.activa
     })
     setMostrarFormulario(true)
@@ -145,7 +145,7 @@ export default function ListasPreciosPage() {
     setFormData({
       nombre: '',
       descripcion: '',
-      porcentaje_descuento: 0,
+      porcentaje_ganancia: 50,
       activa: true
     })
     setMostrarFormulario(false)
@@ -186,23 +186,22 @@ export default function ListasPreciosPage() {
     return (
       <div style={{
         minHeight: '100vh',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        background: '#F9FAFB',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        fontFamily: 'Montserrat, sans-serif'
+        fontFamily: 'system-ui, -apple-system, sans-serif'
       }}>
         <div style={{
-          background: 'rgba(255, 255, 255, 0.1)',
-          backdropFilter: 'blur(20px)',
-          borderRadius: '20px',
+          background: '#FFFFFF',
+          borderRadius: '12px',
           padding: '2rem',
-          border: '1px solid rgba(255, 255, 255, 0.2)',
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
           textAlign: 'center'
         }}>
           <div style={{
             fontSize: '1.2rem',
-            color: 'white',
+            color: '#111827',
             marginBottom: '1rem'
           }}>
             Verificando autenticación...
@@ -219,9 +218,9 @@ export default function ListasPreciosPage() {
   return (
     <div style={{
       minHeight: '100vh',
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      background: '#F9FAFB',
       padding: '100px 1rem 2rem 1rem',
-      fontFamily: 'Montserrat, sans-serif'
+      fontFamily: 'system-ui, -apple-system, sans-serif'
     }}>
       <AdminNavbar />
       
@@ -233,12 +232,11 @@ export default function ListasPreciosPage() {
         transition: 'all 0.6s ease'
       }}>
         <div style={{
-          background: 'rgba(255, 255, 255, 0.1)',
-          backdropFilter: 'blur(20px)',
-          borderRadius: '20px',
+          background: '#FFFFFF',
+          borderRadius: '16px',
           padding: '2rem',
-          border: '1px solid rgba(255, 255, 255, 0.2)',
-          boxShadow: '0 20px 40px rgba(0, 0, 0, 0.1)'
+          border: '1px solid #E5E7EB',
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)'
         }}>
           <div style={{
             display: 'flex',
@@ -247,19 +245,19 @@ export default function ListasPreciosPage() {
             marginBottom: '2rem'
           }}>
             <h1 style={{
-              fontSize: '2.5rem',
+              fontSize: '1.875rem',
               fontWeight: '700',
-              color: 'white',
-              textShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
+              color: '#111827',
+              letterSpacing: '-0.025em',
               margin: 0
             }}>
-              💰 Listas de Precios
+              Listas de Precios
             </h1>
             <button
               onClick={() => setMostrarFormulario(true)}
               style={{
                 background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                color: 'white',
+                color: '#111827',
                 border: 'none',
                 padding: '0.75rem 1.5rem',
                 borderRadius: '12px',
@@ -285,19 +283,19 @@ export default function ListasPreciosPage() {
           {/* Formulario */}
           {mostrarFormulario && (
             <div style={{
-              background: 'rgba(255, 255, 255, 0.05)',
-              borderRadius: '15px',
+              background: '#F9FAFB',
+              borderRadius: '16px',
               padding: '1.5rem',
               marginBottom: '2rem',
-              border: '1px solid rgba(255, 255, 255, 0.1)'
+              border: '1px solid #E5E7EB'
             }}>
               <h3 style={{
-                fontSize: '1.5rem',
+                fontSize: '1.25rem',
                 fontWeight: '600',
-                color: 'white',
+                color: '#111827',
                 marginBottom: '1.5rem'
               }}>
-                {editandoLista ? '✏️ Editar Lista' : '➕ Nueva Lista de Precios'}
+                {editandoLista ? 'Editar Lista' : 'Nueva Lista de Precios'}
               </h3>
 
               <div style={{
@@ -309,9 +307,9 @@ export default function ListasPreciosPage() {
                 <div>
                   <label style={{
                     display: 'block',
-                    fontSize: '0.9rem',
-                    fontWeight: '600',
-                    color: 'rgba(255, 255, 255, 0.9)',
+                    fontSize: '0.875rem',
+                    fontWeight: '500',
+                    color: '#111827',
                     marginBottom: '0.5rem'
                   }}>
                     Nombre de la Lista *
@@ -324,11 +322,13 @@ export default function ListasPreciosPage() {
                     style={{
                       width: '100%',
                       padding: '0.75rem',
-                      borderRadius: '10px',
-                      border: '1px solid rgba(255, 255, 255, 0.3)',
-                      background: 'rgba(255, 255, 255, 0.1)',
-                      color: 'white',
-                      fontSize: '1rem'
+                      borderRadius: '8px',
+                      border: '1px solid #D1D5DB',
+                      background: '#F3F4F6',
+                      color: '#111827',
+                      fontSize: '1rem',
+                      outline: 'none',
+                      boxSizing: 'border-box'
                     }}
                   />
                 </div>
@@ -336,39 +336,49 @@ export default function ListasPreciosPage() {
                 <div>
                   <label style={{
                     display: 'block',
-                    fontSize: '0.9rem',
-                    fontWeight: '600',
-                    color: 'rgba(255, 255, 255, 0.9)',
+                    fontSize: '0.875rem',
+                    fontWeight: '500',
+                    color: '#111827',
                     marginBottom: '0.5rem'
                   }}>
-                    Porcentaje de Descuento (%)
+                    Porcentaje de Ganancia sobre Costo (%)
                   </label>
                   <input
                     type="number"
                     min="0"
-                    max="100"
-                    step="0.01"
-                    value={formData.porcentaje_descuento}
-                    onChange={(e) => setFormData({...formData, porcentaje_descuento: parseFloat(e.target.value) || 0})}
-                    placeholder="0"
+                    max="1000"
+                    step="1"
+                    value={formData.porcentaje_ganancia}
+                    onChange={(e) => setFormData({...formData, porcentaje_ganancia: parseFloat(e.target.value) || 50})}
+                    placeholder="50"
                     style={{
                       width: '100%',
                       padding: '0.75rem',
-                      borderRadius: '10px',
-                      border: '1px solid rgba(255, 255, 255, 0.3)',
-                      background: 'rgba(255, 255, 255, 0.1)',
-                      color: 'white',
-                      fontSize: '1rem'
+                      borderRadius: '8px',
+                      border: '1px solid #D1D5DB',
+                      background: '#F3F4F6',
+                      color: '#111827',
+                      fontSize: '1rem',
+                      outline: 'none',
+                      boxSizing: 'border-box'
                     }}
                   />
+                  <p style={{
+                    fontSize: '0.75rem',
+                    color: '#6B7280',
+                    marginTop: '0.5rem',
+                    margin: '0.5rem 0 0 0'
+                  }}>
+                    Los precios se calcularán como: Costo + (Costo × Porcentaje / 100)
+                  </p>
                 </div>
 
                 <div>
                   <label style={{
                     display: 'block',
-                    fontSize: '0.9rem',
-                    fontWeight: '600',
-                    color: 'rgba(255, 255, 255, 0.9)',
+                    fontSize: '0.875rem',
+                    fontWeight: '500',
+                    color: '#111827',
                     marginBottom: '0.5rem'
                   }}>
                     Estado
@@ -379,15 +389,17 @@ export default function ListasPreciosPage() {
                     style={{
                       width: '100%',
                       padding: '0.75rem',
-                      borderRadius: '10px',
-                      border: '1px solid rgba(255, 255, 255, 0.3)',
-                      background: 'rgba(255, 255, 255, 0.1)',
-                      color: 'white',
-                      fontSize: '1rem'
+                      borderRadius: '8px',
+                      border: '1px solid #D1D5DB',
+                      background: '#F3F4F6',
+                      color: '#111827',
+                      fontSize: '1rem',
+                      outline: 'none',
+                      boxSizing: 'border-box'
                     }}
                   >
-                    <option value="true">Activa</option>
-                    <option value="false">Inactiva</option>
+                    <option value="true" style={{ background: '#FFFFFF', color: '#111827' }}>Activa</option>
+                    <option value="false" style={{ background: '#FFFFFF', color: '#111827' }}>Inactiva</option>
                   </select>
                 </div>
               </div>
@@ -395,9 +407,9 @@ export default function ListasPreciosPage() {
               <div>
                 <label style={{
                   display: 'block',
-                  fontSize: '0.9rem',
-                  fontWeight: '600',
-                  color: 'rgba(255, 255, 255, 0.9)',
+                  fontSize: '0.875rem',
+                  fontWeight: '500',
+                  color: '#111827',
                   marginBottom: '0.5rem'
                 }}>
                   Descripción (opcional)
@@ -410,12 +422,15 @@ export default function ListasPreciosPage() {
                   style={{
                     width: '100%',
                     padding: '0.75rem',
-                    borderRadius: '10px',
-                    border: '1px solid rgba(255, 255, 255, 0.3)',
-                    background: 'rgba(255, 255, 255, 0.1)',
-                    color: 'white',
+                    borderRadius: '8px',
+                    border: '1px solid #D1D5DB',
+                    background: '#F3F4F6',
+                    color: '#111827',
                     fontSize: '1rem',
-                    resize: 'vertical'
+                    resize: 'vertical',
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                    fontFamily: 'system-ui, -apple-system, sans-serif'
                   }}
                 />
               </div>
@@ -429,15 +444,23 @@ export default function ListasPreciosPage() {
                 <button
                   onClick={cancelarEdicion}
                   style={{
-                    background: 'transparent',
-                    color: 'rgba(255, 255, 255, 0.7)',
-                    border: '1px solid rgba(255, 255, 255, 0.3)',
+                    background: '#FFFFFF',
+                    color: '#6B7280',
+                    border: '1px solid #D1D5DB',
                     padding: '0.75rem 1.5rem',
-                    borderRadius: '10px',
-                    fontSize: '1rem',
-                    fontWeight: '600',
+                    borderRadius: '8px',
+                    fontSize: '0.875rem',
+                    fontWeight: '500',
                     cursor: 'pointer',
-                    transition: 'all 0.3s ease'
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.background = '#F3F4F6'
+                    e.currentTarget.style.color = '#374151'
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.background = '#FFFFFF'
+                    e.currentTarget.style.color = '#6B7280'
                   }}
                 >
                   Cancelar
@@ -445,18 +468,24 @@ export default function ListasPreciosPage() {
                 <button
                   onClick={guardarLista}
                   style={{
-                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                    color: 'white',
-                    border: 'none',
+                    background: '#111827',
+                    color: '#FFFFFF',
+                    border: '1px solid #111827',
                     padding: '0.75rem 1.5rem',
-                    borderRadius: '10px',
-                    fontSize: '1rem',
-                    fontWeight: '600',
+                    borderRadius: '8px',
+                    fontSize: '0.875rem',
+                    fontWeight: '500',
                     cursor: 'pointer',
-                    transition: 'all 0.3s ease'
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.background = '#374151'
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.background = '#111827'
                   }}
                 >
-                  {editandoLista ? '💾 Actualizar' : '💾 Crear Lista'}
+                  {editandoLista ? 'Actualizar' : 'Crear Lista'}
                 </button>
               </div>
             </div>
@@ -469,11 +498,19 @@ export default function ListasPreciosPage() {
           }}>
             {listas.map((lista) => (
               <div key={lista.id} style={{
-                background: 'rgba(255, 255, 255, 0.05)',
-                borderRadius: '15px',
+                background: '#F9FAFB',
+                borderRadius: '12px',
                 padding: '1.5rem',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
+                border: '1px solid #E5E7EB',
                 transition: 'all 0.3s ease'
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)'
+                e.currentTarget.style.transform = 'translateY(-2px)'
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.boxShadow = 'none'
+                e.currentTarget.style.transform = 'translateY(0)'
               }}>
                 <div style={{
                   display: 'flex',
@@ -483,16 +520,16 @@ export default function ListasPreciosPage() {
                 }}>
                   <div>
                     <h3 style={{
-                      fontSize: '1.3rem',
+                      fontSize: '1.125rem',
                       fontWeight: '600',
-                      color: 'white',
+                      color: '#111827',
                       margin: '0 0 0.5rem 0'
                     }}>
                       {lista.nombre}
                       {lista.activa ? (
                         <span style={{
-                          background: 'rgba(34, 197, 94, 0.2)',
-                          color: '#22C55E',
+                          background: '#10B981',
+                          color: '#FFFFFF',
                           padding: '0.25rem 0.5rem',
                           borderRadius: '6px',
                           fontSize: '0.8rem',
@@ -502,8 +539,8 @@ export default function ListasPreciosPage() {
                         </span>
                       ) : (
                         <span style={{
-                          background: 'rgba(239, 68, 68, 0.2)',
-                          color: '#EF4444',
+                          background: '#EF4444',
+                          color: '#FFFFFF',
                           padding: '0.25rem 0.5rem',
                           borderRadius: '6px',
                           fontSize: '0.8rem',
@@ -515,7 +552,7 @@ export default function ListasPreciosPage() {
                     </h3>
                     {lista.descripcion && (
                       <p style={{
-                        color: 'rgba(255, 255, 255, 0.7)',
+                        color: '#6B7280',
                         margin: '0 0 0.5rem 0',
                         fontSize: '0.9rem'
                       }}>
@@ -527,7 +564,7 @@ export default function ListasPreciosPage() {
                       margin: 0,
                       fontSize: '0.85rem'
                     }}>
-                      Descuento: {lista.porcentaje_descuento}% | 
+                      Ganancia: {lista.porcentaje_ganancia}% sobre costo | 
                       URL: <code style={{
                         background: 'rgba(255, 255, 255, 0.1)',
                         padding: '0.2rem 0.4rem',
