@@ -11,6 +11,8 @@ export interface ConfiguracionSistema {
   numero_whatsapp: string
   texto_boton_productos: string
   texto_boton_contacto: string
+  descuento_efectivo: number
+  descuento_efectivo_activo: boolean
   created_at?: string
   updated_at?: string
 }
@@ -23,7 +25,9 @@ const configuracionDefault: ConfiguracionSistema = {
   descripcion_empresa: 'Somos una empresa dedicada a ofrecer productos de calidad al mejor precio.',
   numero_whatsapp: '+1234567890',
   texto_boton_productos: 'Ver Nuestros Productos',
-  texto_boton_contacto: 'Contactar'
+  texto_boton_contacto: 'Contactar',
+  descuento_efectivo: 3.00,
+  descuento_efectivo_activo: true
 }
 
 export function useConfiguracion() {

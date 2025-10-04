@@ -30,6 +30,8 @@ export default function ProductosPage() {
   const [mostrarPopupPedido, setMostrarPopupPedido] = useState(false)
   const [vistaLista, setVistaLista] = useState(false)
   const [carruselIndice, setCarruselIndice] = useState(0)
+  const [metodoPago, setMetodoPago] = useState<'transferencia' | 'efectivo'>('transferencia')
+  const [aplicarDescuento, setAplicarDescuento] = useState(true)
   const { configuracion } = useConfiguracion()
 
   useEffect(() => {
@@ -41,6 +43,20 @@ export default function ProductosPage() {
   useEffect(() => {
     filtrarProductos()
   }, [productos, busqueda, categoriaFiltro])
+
+  // Forzar vista de lista en móvil
+  useEffect(() => {
+    const checkScreenSize = () => {
+      if (window.innerWidth <= 768) {
+        setVistaLista(true)
+      }
+    }
+    
+    checkScreenSize()
+    window.addEventListener('resize', checkScreenSize)
+    
+    return () => window.removeEventListener('resize', checkScreenSize)
+  }, [])
 
   // Carrusel manual solamente (sin movimiento automático)
   // useEffect(() => {
@@ -162,14 +178,15 @@ export default function ProductosPage() {
     const productosElegidos = productos.filter(p => 
       productosSeleccionados[p.id] && productosSeleccionados[p.id] > 0
     )
+    const total = calcularTotal()
+    const descuento = calcularDescuento()
+    const totalConDescuento = calcularTotalConDescuento()
     
     let mensaje = '¡Hola! Me interesan estos productos de M DESCARTABLES:\n\n'
-    let total = 0
     
     productosElegidos.forEach((producto, index) => {
       const cantidad = productosSeleccionados[producto.id]
       const subtotal = producto.precio ? producto.precio * cantidad : 0
-      total += subtotal
       
       mensaje += `${index + 1}. ${producto.nombre}`
       mensaje += ` x${cantidad}`
@@ -179,8 +196,17 @@ export default function ProductosPage() {
       mensaje += '\n'
     })
     
-    mensaje += `\n💰 TOTAL: $${total.toFixed(2)}`
-    mensaje += '\n\n¿Podrían confirmar disponibilidad y forma de pago?'
+    mensaje += `\n💰 SUBTOTAL: $${total.toFixed(2)}`
+    
+    if (metodoPago === 'efectivo' && descuento > 0) {
+      mensaje += `\n💵 Descuento por pago en efectivo (${configuracion.descuento_efectivo}%): -$${descuento.toFixed(2)}`
+      mensaje += `\n🎯 TOTAL A PAGAR: $${totalConDescuento.toFixed(2)}`
+    } else {
+      mensaje += `\n🎯 TOTAL A PAGAR: $${total.toFixed(2)}`
+    }
+    
+    mensaje += `\n\n💳 Método de pago: ${metodoPago === 'efectivo' ? 'Efectivo' : 'Transferencia'}`
+    mensaje += '\n\n¿Podrían confirmar disponibilidad?'
     
     return mensaje
   }
@@ -195,6 +221,17 @@ export default function ProductosPage() {
       }
     })
     return total
+  }
+
+  const calcularDescuento = () => {
+    if (metodoPago === 'efectivo' && configuracion.descuento_efectivo_activo && configuracion.descuento_efectivo && aplicarDescuento) {
+      return calcularTotal() * (configuracion.descuento_efectivo / 100)
+    }
+    return 0
+  }
+
+  const calcularTotalConDescuento = () => {
+    return calcularTotal() - calcularDescuento()
   }
 
   const obtenerProductosSeleccionados = () => {
@@ -215,6 +252,9 @@ export default function ProductosPage() {
 
     // Guardar orden en la base de datos
     try {
+      const descuento = calcularDescuento()
+      const totalConDescuento = calcularTotalConDescuento()
+      
       const ordenData = {
         productos: productosSeleccionadosArray.map(producto => ({
           id: producto.id,
@@ -224,6 +264,9 @@ export default function ProductosPage() {
           subtotal: producto.precio ? producto.precio * productosSeleccionados[producto.id] : 0
         })),
         total: total,
+        descuento_aplicado: descuento,
+        total_con_descuento: totalConDescuento,
+        metodo_pago: metodoPago,
         mensaje_whatsapp: mensaje,
         estado: 'pendiente'
       }
@@ -240,7 +283,7 @@ export default function ProductosPage() {
       }
     } catch (error) {
       console.error('Error guardando orden:', error)
-      alert('Error al guardar la orden, pero se abrirá WhatsApp')
+      toast.error('Error al guardar la orden, pero se abrirá WhatsApp')
     }
 
     const numeroWhatsApp = configuracion.numero_whatsapp.replace(/\D/g, '') // Remover caracteres no numéricos
@@ -258,36 +301,6 @@ export default function ProductosPage() {
     setMostrarPopupPedido(true)
   }
 
-  const descargarLista = () => {
-    const productosParaDescargar = productosFiltrados.map((producto, index) => ({
-      '#': index + 1,
-      'Nombre': producto.nombre,
-      'Descripción': producto.descripcion || 'Sin descripción',
-      'Categoría': producto.categoria || 'Sin categoría',
-      'Precio': producto.precio ? `$${producto.precio}` : 'Consultar precio',
-      'Estado': producto.publicado ? 'Publicado' : 'Borrador'
-    }))
-
-    // Convertir a CSV
-    const headers = Object.keys(productosParaDescargar[0])
-    const csvContent = [
-      headers.join(','),
-      ...productosParaDescargar.map(row => 
-        headers.map(header => `"${row[header as keyof typeof row]}"`).join(',')
-      )
-    ].join('\n')
-
-    // Crear y descargar archivo
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    const url = URL.createObjectURL(blob)
-    link.setAttribute('href', url)
-    link.setAttribute('download', `productos_m_descartables_${new Date().toISOString().split('T')[0]}.csv`)
-    link.style.visibility = 'hidden'
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-  }
 
   if (loading) {
     return (
@@ -341,7 +354,7 @@ export default function ProductosPage() {
         zIndex: 3,
         maxWidth: '1400px',
         margin: '0 auto',
-        padding: '5rem 1rem 2rem 1rem',
+        padding: '5rem 0.75rem 2rem 0.75rem',
         minHeight: '100vh'
       }}>
         {/* Header */}
@@ -353,24 +366,17 @@ export default function ProductosPage() {
           transition: 'all 1s ease-out'
         }}>
           <h1 style={{
-            fontSize: 'clamp(2.5rem, 6vw, 4rem)',
+            fontSize: 'clamp(1.8rem, 4.5vw, 3.5rem)',
             fontWeight: '800',
             color: '#000000',
             marginBottom: '1rem',
-            textShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
+            textShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+            lineHeight: '1.2',
+            paddingTop: '0.5rem'
           }}>
             Nuestros Productos
           </h1>
-          <p style={{
-            fontSize: 'clamp(1.1rem, 3vw, 1.25rem)',
-            color: '#374151',
-            maxWidth: '600px',
-            margin: '0 auto',
-            lineHeight: '1.6',
-            textShadow: '0 2px 10px rgba(0, 0, 0, 0.2)'
-          }}>
-            Explora nuestra amplia gama de productos descartables de calidad premium
-          </p>
+        
         </div>
 
         {/* Carrusel de Productos Destacados */}
@@ -379,26 +385,20 @@ export default function ProductosPage() {
             marginBottom: '3rem',
             opacity: isVisible ? 1 : 0,
             transform: isVisible ? 'translateY(0)' : 'translateY(30px)',
-            transition: 'all 1s ease-out 0.1s'
+            transition: 'all 1s ease-out 0.1s',
+            width: '100%',
+            maxWidth: '100%'
           }}>
-            <h2 style={{
-              fontSize: '1.75rem',
-              fontWeight: '700',
-              color: '#111827',
-              textAlign: 'center',
-              marginBottom: '2rem',
-              textShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
-            }}>
-               Productos Destacados
-            </h2>
+           
             
             <div style={{
               position: 'relative',
+              width: '80%',
               maxWidth: '1200px',
               margin: '0 auto',
               overflow: 'hidden',
-              borderRadius: '20px',
-              boxShadow: '0 20px 40px rgba(0, 0, 0, 0.1)',
+              borderRadius: '15px',
+              boxShadow: '0 10px 25px rgba(0, 0, 0, 0.1)',
               background: 'rgba(255, 255, 255, 0.95)',
               backdropFilter: 'blur(10px)',
               border: '1px solid rgba(255, 255, 255, 0.2)'
@@ -414,20 +414,20 @@ export default function ProductosPage() {
                   <div key={producto.id} style={{
                     width: '100%',
                     flexShrink: 0,
-                    padding: '2rem',
+                    padding: '3rem',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '2rem',
-                    minHeight: '300px'
+                    gap: '3rem',
+                    minHeight: '400px'
                   }}>
                     {/* Imagen del producto */}
                     <div style={{
-                      width: '200px',
-                      height: '200px',
+                      width: '280px',
+                      height: '280px',
                       borderRadius: '15px',
                       overflow: 'hidden',
                       flexShrink: 0,
-                      boxShadow: '0 10px 25px rgba(0, 0, 0, 0.1)',
+                      boxShadow: '0 12px 30px rgba(0, 0, 0, 0.2)',
                       background: '#F8F9FA'
                     }}>
                       {producto.foto_url ? (
@@ -458,23 +458,32 @@ export default function ProductosPage() {
                     </div>
                     
                     {/* Información del producto */}
-                    <div style={{ flex: 1 }}>
+                    <div style={{ 
+                      flex: 1,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'flex-start',
+                      textAlign: 'left',
+                      justifyContent: 'center',
+                      paddingLeft: '1rem'
+                    }}>
                       <h3 style={{
-                        fontSize: '1.5rem',
+                        fontSize: '2.5rem',
                         fontWeight: '700',
                         color: '#111827',
-                        marginBottom: '0.75rem',
-                        lineHeight: '1.3'
+                        marginBottom: '1.5rem',
+                        lineHeight: '1.2'
                       }}>
                         {producto.nombre}
                       </h3>
                       
                       {producto.descripcion && (
                         <p style={{
-                          fontSize: '1rem',
+                          fontSize: '1.3rem',
                           color: '#6B7280',
                           lineHeight: '1.6',
-                          marginBottom: '1rem'
+                          marginBottom: '1.5rem',
+                          maxWidth: '600px'
                         }}>
                           {producto.descripcion}
                         </p>
@@ -485,11 +494,11 @@ export default function ProductosPage() {
                           display: 'inline-block',
                           background: 'rgba(139, 92, 246, 0.1)',
                           color: '#8B5CF6',
-                          padding: '0.25rem 0.75rem',
-                          borderRadius: '20px',
-                          fontSize: '0.875rem',
-                          fontWeight: '500',
-                          marginBottom: '1rem'
+                          padding: '0.75rem 1.5rem',
+                          borderRadius: '30px',
+                          fontSize: '1.1rem',
+                          fontWeight: '600',
+                          marginBottom: '2rem'
                         }}>
                           {producto.categoria}
                         </div>
@@ -497,40 +506,14 @@ export default function ProductosPage() {
                       
                       {producto.precio && (
                         <div style={{
-                          fontSize: '2rem',
+                          fontSize: '3.5rem',
                           fontWeight: '800',
                           color: '#10B981',
-                          marginBottom: '1rem'
+                          marginBottom: '0'
                         }}>
                           ${producto.precio.toFixed(2)}
                         </div>
                       )}
-                      
-                      <button
-                        onClick={() => actualizarCantidad(producto.id, (productosSeleccionados[producto.id] || 0) + 1)}
-                        style={{
-                          background: 'linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%)',
-                          color: '#FFFFFF',
-                          border: 'none',
-                          padding: '0.75rem 2rem',
-                          borderRadius: '12px',
-                          fontSize: '1rem',
-                          fontWeight: '600',
-                          cursor: 'pointer',
-                          transition: 'all 0.3s ease',
-                          boxShadow: '0 4px 15px rgba(139, 92, 246, 0.3)'
-                        }}
-                        onMouseOver={(e) => {
-                          e.currentTarget.style.transform = 'translateY(-2px)'
-                          e.currentTarget.style.boxShadow = '0 8px 25px rgba(139, 92, 246, 0.4)'
-                        }}
-                        onMouseOut={(e) => {
-                          e.currentTarget.style.transform = 'translateY(0)'
-                          e.currentTarget.style.boxShadow = '0 4px 15px rgba(139, 92, 246, 0.3)'
-                        }}
-                      >
-                        ➕ Agregar al pedido
-                      </button>
                     </div>
                   </div>
                 ))}
@@ -539,11 +522,11 @@ export default function ProductosPage() {
               {/* Indicadores */}
               <div style={{
                 position: 'absolute',
-                bottom: '1rem',
+                bottom: '0.1rem',
                 left: '50%',
                 transform: 'translateX(-50%)',
                 display: 'flex',
-                gap: '0.5rem',
+                gap: '0.3rem',
                 zIndex: 2
               }}>
                 {productosDestacados.map((_, index) => (
@@ -551,8 +534,8 @@ export default function ProductosPage() {
                     key={index}
                     onClick={() => setCarruselIndice(index)}
                     style={{
-                      width: '12px',
-                      height: '12px',
+                      width: '8px',
+                      height: '8px',
                       borderRadius: '50%',
                       border: 'none',
                       background: index === carruselIndice 
@@ -575,24 +558,24 @@ export default function ProductosPage() {
                 )}
                 style={{
                   position: 'absolute',
-                  left: '1rem',
+                  left: '0.5rem',
                   top: '50%',
                   transform: 'translateY(-50%)',
                   background: 'rgba(255, 255, 255, 0.9)',
                   border: '1px solid rgba(139, 92, 246, 0.2)',
-                  width: '50px',
-                  height: '50px',
+                  width: '32px',
+                  height: '32px',
                   borderRadius: '50%',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   cursor: 'pointer',
-                  fontSize: '1.25rem',
+                  fontSize: '0.9rem',
                   color: '#8B5CF6',
                   transition: 'all 0.3s ease',
                   zIndex: 2,
                   backdropFilter: 'blur(10px)',
-                  boxShadow: '0 4px 15px rgba(0, 0, 0, 0.1)'
+                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
                 }}
                 onMouseOver={(e) => {
                   e.currentTarget.style.background = 'rgba(139, 92, 246, 0.1)'
@@ -612,24 +595,24 @@ export default function ProductosPage() {
                 )}
                 style={{
                   position: 'absolute',
-                  right: '1rem',
+                  right: '0.5rem',
                   top: '50%',
                   transform: 'translateY(-50%)',
                   background: 'rgba(255, 255, 255, 0.9)',
                   border: '1px solid rgba(139, 92, 246, 0.2)',
-                  width: '50px',
-                  height: '50px',
+                  width: '32px',
+                  height: '32px',
                   borderRadius: '50%',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   cursor: 'pointer',
-                  fontSize: '1.25rem',
+                  fontSize: '0.9rem',
                   color: '#8B5CF6',
                   transition: 'all 0.3s ease',
                   zIndex: 2,
                   backdropFilter: 'blur(10px)',
-                  boxShadow: '0 4px 15px rgba(0, 0, 0, 0.1)'
+                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
                 }}
                 onMouseOver={(e) => {
                   e.currentTarget.style.background = 'rgba(139, 92, 246, 0.1)'
@@ -670,8 +653,8 @@ export default function ProductosPage() {
           </h3>
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-            gap: '1.5rem'
+            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+            gap: '1rem'
           }}>
             <div>
               <label style={{
@@ -763,120 +746,30 @@ export default function ProductosPage() {
             justifyContent: 'space-between',
             alignItems: 'center',
             flexWrap: 'wrap',
-            gap: '1rem'
+            gap: '0.75rem'
           }}>
             <div style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '1rem'
+              gap: '0.5rem',
+              flexWrap: 'wrap'
             }}>
               <span style={{
                 fontSize: '0.9rem',
                 fontWeight: '600',
                 color: '#374151'
               }}>
-                Vista:
-              </span>
-              <button
-                onClick={() => setVistaLista(false)}
-                style={{
-                  background: vistaLista ? 'transparent' : 'linear-gradient(135deg, #8B5CF6 0%, #4C1D95 100%)',
-                  color: vistaLista ? '#6B7280' : '#FFFFFF',
-                  border: vistaLista ? '2px solid #E5E7EB' : 'none',
-                  padding: '0.5rem 1rem',
-                  borderRadius: '8px',
-                  fontSize: '0.9rem',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  transition: 'all 0.3s ease',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem'
-                }}
-                onMouseOver={(e) => {
-                  if (vistaLista) {
-                    e.currentTarget.style.borderColor = '#8B5CF6'
-                    e.currentTarget.style.color = '#8B5CF6'
-                  }
-                }}
-                onMouseOut={(e) => {
-                  if (vistaLista) {
-                    e.currentTarget.style.borderColor = '#E5E7EB'
-                    e.currentTarget.style.color = '#6B7280'
-                  }
-                }}
-              >
-                🔲 Cuadrícula
-              </button>
-              <button
-                onClick={() => setVistaLista(true)}
-                style={{
-                  background: vistaLista ? 'linear-gradient(135deg, #8B5CF6 0%, #4C1D95 100%)' : 'transparent',
-                  color: vistaLista ? '#FFFFFF' : '#6B7280',
-                  border: vistaLista ? 'none' : '2px solid #E5E7EB',
-                  padding: '0.5rem 1rem',
-                  borderRadius: '8px',
-                  fontSize: '0.9rem',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  transition: 'all 0.3s ease',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem'
-                }}
-                onMouseOver={(e) => {
-                  if (!vistaLista) {
-                    e.currentTarget.style.borderColor = '#8B5CF6'
-                    e.currentTarget.style.color = '#8B5CF6'
-                  }
-                }}
-                onMouseOut={(e) => {
-                  if (!vistaLista) {
-                    e.currentTarget.style.borderColor = '#E5E7EB'
-                    e.currentTarget.style.color = '#6B7280'
-                  }
-                }}
-              >
                 📋 Lista
-              </button>
+              </span>
             </div>
-            
-            <button
-              onClick={descargarLista}
-              style={{
-                background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
-                color: '#FFFFFF',
-                border: 'none',
-                padding: '0.5rem 1rem',
-                borderRadius: '8px',
-                fontSize: '0.9rem',
-                fontWeight: '600',
-                cursor: 'pointer',
-                transition: 'all 0.3s ease',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                boxShadow: '0 4px 15px rgba(16, 185, 129, 0.3)'
-              }}
-              onMouseOver={(e) => {
-                e.currentTarget.style.transform = 'translateY(-2px) scale(1.05)'
-                e.currentTarget.style.boxShadow = '0 8px 25px rgba(16, 185, 129, 0.4)'
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.style.transform = 'translateY(0) scale(1)'
-                e.currentTarget.style.boxShadow = '0 4px 15px rgba(16, 185, 129, 0.3)'
-              }}
-            >
-              📥 Descargar Lista
-            </button>
           </div>
         </div>
 
         {/* Products Grid/List */}
         <div style={{
           display: vistaLista ? 'block' : 'grid',
-          gridTemplateColumns: vistaLista ? 'none' : 'repeat(auto-fit, minmax(320px, 1fr))',
-          gap: vistaLista ? '0.5rem' : '1.5rem',
+          gridTemplateColumns: vistaLista ? 'none' : 'repeat(auto-fit, minmax(280px, 1fr))',
+          gap: vistaLista ? '0.5rem' : '1rem',
           marginBottom: '2rem'
         }}>
           {productosFiltrados.map((producto, index) => (
@@ -1019,6 +912,26 @@ export default function ProductosPage() {
                           {producto.precio ? `$${producto.precio}` : 'Consultar precio'}
                         </span>
                       </div>
+                      
+                      {/* Subtotal debajo del precio */}
+                      {productosSeleccionados[producto.id] && productosSeleccionados[producto.id] > 0 && (
+                        <div style={{
+                          marginTop: '0.5rem',
+                          padding: '0.5rem',
+                          background: 'rgba(139, 92, 246, 0.05)',
+                          borderRadius: '8px',
+                          border: '1px solid rgba(139, 92, 246, 0.1)',
+                          textAlign: 'center'
+                        }}>
+                          <span style={{
+                            fontSize: '0.9rem',
+                            fontWeight: '600',
+                            color: '#6B7280'
+                          }}>
+                            Subtotal: ${producto.precio ? (producto.precio * productosSeleccionados[producto.id]).toFixed(2) : '0.00'}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
                   
@@ -1026,17 +939,9 @@ export default function ProductosPage() {
                   <div style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '0.75rem'
+                    gap: '0.5rem',
+                    justifyContent: 'flex-end'
                   }}>
-                    {productosSeleccionados[producto.id] && productosSeleccionados[producto.id] > 0 && (
-                      <div style={{
-                        fontSize: '0.9rem',
-                        fontWeight: '600',
-                        color: '#6B7280'
-                      }}>
-                        Subtotal: ${producto.precio ? (producto.precio * productosSeleccionados[producto.id]).toFixed(2) : '0.00'}
-                      </div>
-                    )}
                     <div style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -1050,14 +955,14 @@ export default function ProductosPage() {
                         style={{
                           background: 'rgba(139, 92, 246, 0.1)',
                           border: '1px solid rgba(139, 92, 246, 0.3)',
-                          borderRadius: '6px',
-                          width: '32px',
-                          height: '32px',
+                          borderRadius: '4px',
+                          width: '24px',
+                          height: '24px',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
                           cursor: 'pointer',
-                          fontSize: '1.2rem',
+                          fontSize: '0.9rem',
                           color: '#8B5CF6',
                           transition: 'all 0.2s ease'
                         }}
@@ -1087,14 +992,14 @@ export default function ProductosPage() {
                         style={{
                           background: 'rgba(139, 92, 246, 0.1)',
                           border: '1px solid rgba(139, 92, 246, 0.3)',
-                          borderRadius: '6px',
-                          width: '32px',
-                          height: '32px',
+                          borderRadius: '4px',
+                          width: '24px',
+                          height: '24px',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
                           cursor: 'pointer',
-                          fontSize: '1.2rem',
+                          fontSize: '0.9rem',
                           color: '#8B5CF6',
                           transition: 'all 0.2s ease'
                         }}
@@ -1235,15 +1140,6 @@ export default function ProductosPage() {
                     }}>
                       {producto.precio ? `$${producto.precio}` : 'Consultar precio'}
                     </div>
-                    {productosSeleccionados[producto.id] && productosSeleccionados[producto.id] > 0 && (
-                      <div style={{
-                        fontSize: '1rem',
-                        fontWeight: '600',
-                        color: '#6B7280'
-                      }}>
-                        Subtotal: ${producto.precio ? (producto.precio * productosSeleccionados[producto.id]).toFixed(2) : '0.00'}
-                      </div>
-                    )}
                   </div>
                   
                   {/* Controles de cantidad */}
@@ -1295,9 +1191,9 @@ export default function ProductosPage() {
                       
                       <span style={{
                         color: '#000000',
-                        fontSize: '1rem',
+                        fontSize: '0.9rem',
                         fontWeight: '600',
-                        minWidth: '30px',
+                        minWidth: '24px',
                         textAlign: 'center'
                       }}>
                         {productosSeleccionados[producto.id] || 0}
@@ -1443,18 +1339,20 @@ export default function ProductosPage() {
         {Object.keys(productosSeleccionados).length > 0 && obtenerProductosSeleccionados().length > 0 && (
           <div style={{
             position: 'fixed',
-            bottom: '2rem',
-            right: '2rem',
+            bottom: '1rem',
+            right: '1rem',
+            left: '1rem',
             background: 'rgba(139, 92, 246, 0.05)',
-            padding: '1rem 1.5rem',
-            borderRadius: '50px',
+            padding: '0.75rem 1rem',
+            borderRadius: '25px',
             backdropFilter: 'blur(20px)',
             border: '1px solid rgba(139, 92, 246, 0.1)',
             boxShadow: '0 20px 40px rgba(0, 0, 0, 0.2)',
             zIndex: 10,
             display: 'flex',
             alignItems: 'center',
-            gap: '1rem'
+            justifyContent: 'center',
+            gap: '0.75rem'
           }}>
             <span style={{
               background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
@@ -1472,9 +1370,9 @@ export default function ProductosPage() {
                 background: 'linear-gradient(135deg, #25D366 0%, #128C7E 100%)',
                 color: '#000000',
                 border: 'none',
-                padding: '0.75rem 1.5rem',
-                borderRadius: '25px',
-                fontSize: '1rem',
+                padding: '0.6rem 1.2rem',
+                borderRadius: '20px',
+                fontSize: '0.9rem',
                 fontWeight: '700',
                 cursor: 'pointer',
                 transition: 'all 0.3s ease',
@@ -1623,6 +1521,114 @@ export default function ProductosPage() {
               })}
             </div>
             
+            {/* Selección de método de pago */}
+            <div style={{
+              marginBottom: '1.5rem',
+              padding: '1.5rem',
+              background: '#F9FAFB',
+              borderRadius: '12px',
+              border: '1px solid #E5E7EB'
+            }}>
+              <h4 style={{
+                fontSize: '1.1rem',
+                fontWeight: '700',
+                color: '#111827',
+                marginBottom: '1rem',
+                textAlign: 'center'
+              }}>
+                💳 Método de Pago
+              </h4>
+              
+              <div style={{
+                display: 'flex',
+                gap: '1rem',
+                justifyContent: 'center'
+              }}>
+                <button
+                  onClick={() => setMetodoPago('transferencia')}
+                  style={{
+                    background: metodoPago === 'transferencia' ? '#3B82F6' : '#FFFFFF',
+                    color: metodoPago === 'transferencia' ? '#FFFFFF' : '#374151',
+                    border: '2px solid #3B82F6',
+                    padding: '0.75rem 1.5rem',
+                    borderRadius: '8px',
+                    fontSize: '1rem',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem'
+                  }}
+                >
+                  🏦 Transferencia
+                </button>
+                
+                <button
+                  onClick={() => setMetodoPago('efectivo')}
+                  style={{
+                    background: metodoPago === 'efectivo' ? '#10B981' : '#FFFFFF',
+                    color: metodoPago === 'efectivo' ? '#FFFFFF' : '#374151',
+                    border: '2px solid #10B981',
+                    padding: '0.75rem 1.5rem',
+                    borderRadius: '8px',
+                    fontSize: '1rem',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem'
+                  }}
+                >
+                  💵 Efectivo
+                  {metodoPago === 'efectivo' && configuracion.descuento_efectivo_activo && configuracion.descuento_efectivo > 0 && aplicarDescuento && (
+                    <span style={{
+                      background: 'rgba(255, 255, 255, 0.2)',
+                      padding: '0.25rem 0.5rem',
+                      borderRadius: '4px',
+                      fontSize: '0.8rem'
+                    }}>
+                      -{configuracion.descuento_efectivo}%
+                    </span>
+                  )}
+                </button>
+              </div>
+              
+              {metodoPago === 'efectivo' && configuracion.descuento_efectivo_activo && configuracion.descuento_efectivo > 0 && (
+                <div style={{
+                  marginTop: '1rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.5rem'
+                }}>
+                  <input
+                    type="checkbox"
+                    id="aplicarDescuento"
+                    checked={aplicarDescuento}
+                    onChange={(e) => setAplicarDescuento(e.target.checked)}
+                    style={{
+                      width: '18px',
+                      height: '18px',
+                      cursor: 'pointer'
+                    }}
+                  />
+                  <label
+                    htmlFor="aplicarDescuento"
+                    style={{
+                      fontSize: '0.9rem',
+                      color: '#374151',
+                      cursor: 'pointer',
+                      fontWeight: '500'
+                    }}
+                  >
+                    Aplicar descuento del {configuracion.descuento_efectivo}%
+                  </label>
+                </div>
+              )}
+            </div>
+
             <div style={{
               borderTop: '2px solid rgba(139, 92, 246, 0.2)',
               paddingTop: '1.5rem',
@@ -1639,15 +1645,62 @@ export default function ProductosPage() {
                   fontSize: '1.2rem',
                   fontWeight: '700'
                 }}>
-                  Total:
+                  Subtotal:
                 </span>
                 <span style={{
-                  color: '#000000',
+                  color: '#6B7280',
+                  fontSize: '1.2rem',
+                  fontWeight: '600'
+                }}>
+                  ${calcularTotal().toFixed(2)}
+                </span>
+              </div>
+              
+              {metodoPago === 'efectivo' && calcularDescuento() > 0 && aplicarDescuento && (
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: '0.5rem'
+                }}>
+                  <span style={{
+                    color: '#10B981',
+                    fontSize: '1.1rem',
+                    fontWeight: '600'
+                  }}>
+                    Descuento por efectivo ({configuracion.descuento_efectivo}%):
+                  </span>
+                  <span style={{
+                    color: '#10B981',
+                    fontSize: '1.1rem',
+                    fontWeight: '600'
+                  }}>
+                    -${calcularDescuento().toFixed(2)}
+                  </span>
+                </div>
+              )}
+              
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                paddingTop: '0.5rem',
+                borderTop: '1px solid #E5E7EB'
+              }}>
+                <span style={{
+                  color: '#111827',
+                  fontSize: '1.4rem',
+                  fontWeight: '800'
+                }}>
+                  Total a Pagar:
+                </span>
+                <span style={{
+                  color: '#111827',
                   fontSize: '1.8rem',
                   fontWeight: '800',
                   textShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
                 }}>
-                  ${calcularTotal().toFixed(2)}
+                  ${calcularTotalConDescuento().toFixed(2)}
                 </span>
               </div>
             </div>

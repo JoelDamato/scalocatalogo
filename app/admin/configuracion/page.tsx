@@ -24,6 +24,9 @@ interface ConfiguracionSistema {
   contenedor_horarios_descripcion: string
   contenedor_quienes_somos_titulo: string
   contenedor_quienes_somos_descripcion: string
+  // Descuento por pago en efectivo
+  descuento_efectivo: number
+  descuento_efectivo_activo: boolean
   created_at?: string
   updated_at?: string
 }
@@ -46,7 +49,10 @@ export default function ConfiguracionPage() {
     contenedor_horarios_titulo: 'Horarios de Atención',
     contenedor_horarios_descripcion: 'Lunes a Viernes: 9:00 AM - 6:00 PM\nSábados: 9:00 AM - 2:00 PM\nDomingos: Cerrado',
     contenedor_quienes_somos_titulo: 'Quiénes Somos',
-    contenedor_quienes_somos_descripcion: 'Somos una empresa familiar con más de 10 años de experiencia, comprometidos con la calidad y satisfacción de nuestros clientes.'
+    contenedor_quienes_somos_descripcion: 'Somos una empresa familiar con más de 10 años de experiencia, comprometidos con la calidad y satisfacción de nuestros clientes.',
+    // Descuento por pago en efectivo (por defecto 3%)
+    descuento_efectivo: 3.00,
+    descuento_efectivo_activo: true
   })
   const [archivoLogo, setArchivoLogo] = useState<File | null>(null)
   const [subiendoLogo, setSubiendoLogo] = useState(false)
@@ -83,12 +89,12 @@ export default function ConfiguracionPage() {
     const file = e.target.files?.[0]
     if (file) {
       if (!file.type.startsWith('image/')) {
-        alert('Por favor selecciona un archivo de imagen válido')
+        toast.error('Por favor selecciona un archivo de imagen válido')
         return
       }
       
       if (file.size > 5 * 1024 * 1024) {
-        alert('La imagen debe ser menor a 5MB')
+        toast.error('La imagen debe ser menor a 5MB')
         return
       }
       
@@ -103,7 +109,7 @@ export default function ConfiguracionPage() {
       return url
     } catch (error) {
       console.error('Error subiendo imagen:', error)
-      alert('Error al subir la imagen')
+      toast.error('Error al subir la imagen')
       return null
     } finally {
       setSubiendoLogo(false)
@@ -139,11 +145,11 @@ export default function ConfiguracionPage() {
 
       if (error) {
         console.error('Error guardando configuración:', error)
-        alert('Error al guardar la configuración')
+        toast.error('Error al guardar la configuración')
         return
       }
 
-      alert('Configuración guardada exitosamente')
+      toast.success('Configuración guardada exitosamente')
       setArchivoLogo(null)
       
       // Recargar configuración
@@ -713,6 +719,105 @@ export default function ConfiguracionPage() {
           </div>
 
           {/* Botón guardar */}
+          {/* Descuento por pago en efectivo */}
+          <div style={{ marginBottom: '2rem' }}>
+            <h2 style={{
+              fontSize: '1.5rem',
+              fontWeight: '700',
+              color: '#111827',
+              marginBottom: '1.5rem',
+              textAlign: 'center'
+            }}>
+              Configuración de Descuentos
+            </h2>
+
+            <div style={{
+              background: '#F9FAFB',
+              padding: '1.5rem',
+              borderRadius: '12px',
+              border: '1px solid #E5E7EB'
+            }}>
+          <div style={{ marginBottom: '1.5rem' }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.75rem',
+              marginBottom: '1rem',
+              padding: '1rem',
+              background: '#F9FAFB',
+              borderRadius: '8px',
+              border: '1px solid #E5E7EB'
+            }}>
+              <input
+                type="checkbox"
+                id="descuentoEfectivoActivo"
+                checked={configuracion.descuento_efectivo_activo}
+                onChange={(e) => setConfiguracion({...configuracion, descuento_efectivo_activo: e.target.checked})}
+                style={{
+                  width: '20px',
+                  height: '20px',
+                  cursor: 'pointer'
+                }}
+              />
+              <label
+                htmlFor="descuentoEfectivoActivo"
+                style={{
+                  fontSize: '1rem',
+                  fontWeight: '600',
+                  color: '#111827',
+                  cursor: 'pointer',
+                  margin: 0
+                }}
+              >
+                Activar descuento por pago en efectivo
+              </label>
+            </div>
+            
+            {configuracion.descuento_efectivo_activo && (
+              <div>
+                <label style={{
+                  display: 'block',
+                  fontSize: '0.9rem',
+                  fontWeight: '600',
+                  color: '#111827',
+                  marginBottom: '0.5rem'
+                }}>
+                  Porcentaje de Descuento (%)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  value={configuracion.descuento_efectivo}
+                  onChange={(e) => setConfiguracion({...configuracion, descuento_efectivo: parseFloat(e.target.value) || 0})}
+                  placeholder="3.00"
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem',
+                    borderRadius: '8px',
+                    border: '1px solid #D1D5DB',
+                    background: '#FFFFFF',
+                    color: '#111827',
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                    fontSize: '1rem'
+                  }}
+                />
+                <p style={{
+                  fontSize: '0.8rem',
+                  color: '#6B7280',
+                  marginTop: '0.5rem',
+                  margin: '0.5rem 0 0 0'
+                }}>
+                  Porcentaje de descuento que se aplicará cuando el cliente elija pagar en efectivo
+                </p>
+              </div>
+            )}
+          </div>
+            </div>
+          </div>
+
           <div style={{ textAlign: 'center' }}>
             <button
               onClick={guardarConfiguracion}

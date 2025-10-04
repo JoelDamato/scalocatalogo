@@ -45,6 +45,8 @@ export default function ListaPreciosPage({ params }: PageProps) {
   const [isVisible, setIsVisible] = useState(false)
   const [vistaLista, setVistaLista] = useState(false)
   const [mostrarPopupPedido, setMostrarPopupPedido] = useState(false)
+  const [metodoPago, setMetodoPago] = useState<'transferencia' | 'efectivo'>('transferencia')
+  const [aplicarDescuento, setAplicarDescuento] = useState(true)
   const [slug, setSlug] = useState<string>('')
   const { configuracion } = useConfiguracion()
 
@@ -173,6 +175,17 @@ export default function ListaPreciosPage({ params }: PageProps) {
     return total
   }
 
+  const calcularDescuento = () => {
+    if (metodoPago === 'efectivo' && configuracion.descuento_efectivo_activo && configuracion.descuento_efectivo && aplicarDescuento) {
+      return calcularTotal() * (configuracion.descuento_efectivo / 100)
+    }
+    return 0
+  }
+
+  const calcularTotalConDescuento = () => {
+    return calcularTotal() - calcularDescuento()
+  }
+
   const obtenerProductosSeleccionados = () => {
     return productos.filter(p => 
       productosSeleccionados[p.id] && productosSeleccionados[p.id] > 0
@@ -186,15 +199,17 @@ export default function ListaPreciosPage({ params }: PageProps) {
     
     if (productosElegidos.length === 0) return ''
 
+    const total = calcularTotal()
+    const descuento = calcularDescuento()
+    const totalConDescuento = calcularTotalConDescuento()
+
     let mensaje = `🛒 *Pedido desde Lista: ${lista?.nombre}*\n\n`
     mensaje += `📋 *Productos seleccionados:*\n\n`
     
-    let total = 0
     productosElegidos.forEach((producto, index) => {
       const cantidad = productosSeleccionados[producto.id]
       const precioConGanancia = calcularPrecioConGanancia(producto)
       const subtotal = precioConGanancia * cantidad
-      total += subtotal
       
       mensaje += `${index + 1}. *${producto.nombre}*\n`
       mensaje += `   Cantidad: ${cantidad}\n`
@@ -202,8 +217,16 @@ export default function ListaPreciosPage({ params }: PageProps) {
       mensaje += `   Subtotal: $${subtotal.toFixed(2)}\n\n`
     })
     
-    mensaje += `💰 *Total: $${total.toFixed(2)}*\n\n`
-    mensaje += `🎯 *Descuento aplicado: ${lista?.porcentaje_ganancia}%*\n\n`
+    mensaje += `💰 *SUBTOTAL: $${total.toFixed(2)}*\n`
+    
+    if (metodoPago === 'efectivo' && descuento > 0) {
+      mensaje += `💵 *Descuento por pago en efectivo (${configuracion.descuento_efectivo}%): -$${descuento.toFixed(2)}*\n`
+      mensaje += `🎯 *TOTAL A PAGAR: $${totalConDescuento.toFixed(2)}*\n`
+    } else {
+      mensaje += `🎯 *TOTAL A PAGAR: $${total.toFixed(2)}*\n`
+    }
+    
+    mensaje += `\n💳 *Método de pago: ${metodoPago === 'efectivo' ? 'Efectivo' : 'Transferencia'}*\n\n`
     mensaje += `¡Hola! Me interesa realizar este pedido.`
     
     return mensaje
@@ -212,7 +235,7 @@ export default function ListaPreciosPage({ params }: PageProps) {
   const enviarWhatsApp = async () => {
     const productosSeleccionadosArray = obtenerProductosSeleccionados()
     if (productosSeleccionadosArray.length === 0) {
-      alert('Por favor selecciona al menos un producto')
+      toast.warn('Por favor selecciona al menos un producto')
       return
     }
 
@@ -221,6 +244,9 @@ export default function ListaPreciosPage({ params }: PageProps) {
 
     // Guardar orden en la base de datos
     try {
+      const descuento = calcularDescuento()
+      const totalConDescuento = calcularTotalConDescuento()
+      
       const { error } = await supabase
         .from('ordenes')
         .insert({
@@ -234,13 +260,16 @@ export default function ListaPreciosPage({ params }: PageProps) {
             subtotal: calcularPrecioConGanancia(producto) * productosSeleccionados[producto.id]
           })),
           total: total,
+          descuento_aplicado: descuento,
+          total_con_descuento: totalConDescuento,
+          metodo_pago: metodoPago,
           mensaje_whatsapp: mensaje,
           estado: 'pendiente'
         })
 
       if (error) {
         console.error('Error guardando orden:', error)
-        alert('Error al guardar la orden, pero se abrirá WhatsApp')
+        toast.error('Error al guardar la orden, pero se abrirá WhatsApp')
       } else {
         console.log('Orden guardada exitosamente')
       }
@@ -258,7 +287,7 @@ export default function ListaPreciosPage({ params }: PageProps) {
   const mostrarPedido = () => {
     const productosSeleccionadosArray = obtenerProductosSeleccionados()
     if (productosSeleccionadosArray.length === 0) {
-      alert('Por favor selecciona al menos un producto')
+      toast.warn('Por favor selecciona al menos un producto')
       return
     }
     setMostrarPopupPedido(true)
@@ -1058,6 +1087,114 @@ export default function ListaPreciosPage({ params }: PageProps) {
               })}
             </div>
 
+            {/* Selección de método de pago */}
+            <div style={{
+              marginBottom: '1.5rem',
+              padding: '1.5rem',
+              background: '#F9FAFB',
+              borderRadius: '12px',
+              border: '1px solid #E5E7EB'
+            }}>
+              <h4 style={{
+                fontSize: '1.1rem',
+                fontWeight: '700',
+                color: '#111827',
+                marginBottom: '1rem',
+                textAlign: 'center'
+              }}>
+                💳 Método de Pago
+              </h4>
+              
+              <div style={{
+                display: 'flex',
+                gap: '1rem',
+                justifyContent: 'center'
+              }}>
+                <button
+                  onClick={() => setMetodoPago('transferencia')}
+                  style={{
+                    background: metodoPago === 'transferencia' ? '#3B82F6' : '#FFFFFF',
+                    color: metodoPago === 'transferencia' ? '#FFFFFF' : '#374151',
+                    border: '2px solid #3B82F6',
+                    padding: '0.75rem 1.5rem',
+                    borderRadius: '8px',
+                    fontSize: '1rem',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem'
+                  }}
+                >
+                  🏦 Transferencia
+                </button>
+                
+                <button
+                  onClick={() => setMetodoPago('efectivo')}
+                  style={{
+                    background: metodoPago === 'efectivo' ? '#10B981' : '#FFFFFF',
+                    color: metodoPago === 'efectivo' ? '#FFFFFF' : '#374151',
+                    border: '2px solid #10B981',
+                    padding: '0.75rem 1.5rem',
+                    borderRadius: '8px',
+                    fontSize: '1rem',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem'
+                  }}
+                >
+                  💵 Efectivo
+                  {metodoPago === 'efectivo' && configuracion.descuento_efectivo_activo && configuracion.descuento_efectivo > 0 && aplicarDescuento && (
+                    <span style={{
+                      background: 'rgba(255, 255, 255, 0.2)',
+                      padding: '0.25rem 0.5rem',
+                      borderRadius: '4px',
+                      fontSize: '0.8rem'
+                    }}>
+                      -{configuracion.descuento_efectivo}%
+                    </span>
+                  )}
+                </button>
+              </div>
+              
+              {metodoPago === 'efectivo' && configuracion.descuento_efectivo_activo && configuracion.descuento_efectivo > 0 && (
+                <div style={{
+                  marginTop: '1rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.5rem'
+                }}>
+                  <input
+                    type="checkbox"
+                    id="aplicarDescuento"
+                    checked={aplicarDescuento}
+                    onChange={(e) => setAplicarDescuento(e.target.checked)}
+                    style={{
+                      width: '18px',
+                      height: '18px',
+                      cursor: 'pointer'
+                    }}
+                  />
+                  <label
+                    htmlFor="aplicarDescuento"
+                    style={{
+                      fontSize: '0.9rem',
+                      color: '#374151',
+                      cursor: 'pointer',
+                      fontWeight: '500'
+                    }}
+                  >
+                    Aplicar descuento del {configuracion.descuento_efectivo}%
+                  </label>
+                </div>
+              )}
+            </div>
+
             <div style={{
               borderTop: '2px solid #E5E7EB',
               paddingTop: '1rem',
@@ -1066,21 +1203,69 @@ export default function ListaPreciosPage({ params }: PageProps) {
               <div style={{
                 display: 'flex',
                 justifyContent: 'space-between',
-                alignItems: 'center'
+                alignItems: 'center',
+                marginBottom: '0.5rem'
+              }}>
+                <span style={{
+                  fontSize: '1.1rem',
+                  fontWeight: '600',
+                  color: '#6B7280'
+                }}>
+                  Subtotal:
+                </span>
+                <span style={{
+                  fontSize: '1.1rem',
+                  fontWeight: '600',
+                  color: '#6B7280'
+                }}>
+                  ${calcularTotal().toFixed(2)}
+                </span>
+              </div>
+              
+              {metodoPago === 'efectivo' && calcularDescuento() > 0 && aplicarDescuento && (
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: '0.5rem'
+                }}>
+                  <span style={{
+                    color: '#10B981',
+                    fontSize: '1rem',
+                    fontWeight: '600'
+                  }}>
+                    Descuento por efectivo ({configuracion.descuento_efectivo}%):
+                  </span>
+                  <span style={{
+                    color: '#10B981',
+                    fontSize: '1rem',
+                    fontWeight: '600'
+                  }}>
+                    -${calcularDescuento().toFixed(2)}
+                  </span>
+                </div>
+              )}
+              
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                paddingTop: '0.5rem',
+                borderTop: '1px solid #E5E7EB'
               }}>
                 <span style={{
                   fontSize: '1.2rem',
                   fontWeight: '700',
                   color: '#1F2937'
                 }}>
-                  Total:
+                  Total a Pagar:
                 </span>
                 <span style={{
                   fontSize: '1.5rem',
                   fontWeight: '700',
                   color: '#8B5CF6'
                 }}>
-                  ${calcularTotal().toFixed(2)}
+                  ${calcularTotalConDescuento().toFixed(2)}
                 </span>
               </div>
             </div>

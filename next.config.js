@@ -1,9 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
-  experimental: {
-    esmExternals: 'loose'
-  },
   images: {
     domains: ['res.cloudinary.com'],
     remotePatterns: [

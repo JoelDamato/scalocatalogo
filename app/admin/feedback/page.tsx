@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import AdminNavbar from "../../../src/components/AdminNavbar"
 import { useAuth } from "../../../src/hooks/useAuth"
+import { toast } from 'react-toastify'
 export default function AdminFeedback() {
   const { isAuthenticated, loading: authLoading } = useAuth()
   const [formData, setFormData] = useState({
@@ -66,14 +67,14 @@ export default function AdminFeedback() {
       })
 
       if (response.ok) {
-        alert('¡Feedback enviado exitosamente! Gracias por tu comentario. Te contactaremos pronto por email.')
+        toast.success('¡Feedback enviado exitosamente! Gracias por tu comentario. Te contactaremos pronto por email.')
         setFormData({ nombre: '', email: '', mensaje: '' })
       } else {
         throw new Error('Error al enviar el feedback')
       }
     } catch (error) {
       console.error('Error enviando feedback:', error)
-      alert('Error al enviar el feedback. Por favor, inténtalo de nuevo.')
+      toast.error('Error al enviar el feedback. Por favor, inténtalo de nuevo.')
     } finally {
       setLoading(false)
     }

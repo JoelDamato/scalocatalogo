@@ -6,6 +6,7 @@ import Link from 'next/link'
 import AdminAuth from "../../../src/components/AdminAuth"
 import AdminNavbar from "../../../src/components/AdminNavbar"
 import { useAuth } from "../../../src/hooks/useAuth"
+import { toast } from 'react-toastify'
 
 interface ListaPrecios {
   id: string
@@ -23,6 +24,71 @@ export default function ListasPreciosPage() {
   const [loading, setLoading] = useState(true)
   const [isVisible, setIsVisible] = useState(false)
   const [listas, setListas] = useState<ListaPrecios[]>([])
+  
+  // Función de confirmación con toast
+  const confirmDelete = (message: string, onConfirm: () => void) => {
+    const toastId = toast(
+      <div style={{ padding: '1rem' }}>
+        <div style={{ marginBottom: '1rem', fontSize: '1rem', fontWeight: '600', color: '#111827' }}>
+          {message}
+        </div>
+        <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+          <button
+            onClick={() => toast.dismiss(toastId)}
+            style={{
+              background: '#6B7280',
+              color: '#FFFFFF',
+              border: 'none',
+              padding: '0.5rem 1rem',
+              borderRadius: '6px',
+              fontSize: '0.875rem',
+              fontWeight: '500',
+              cursor: 'pointer',
+              transition: 'background 0.2s ease'
+            }}
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={() => {
+              toast.dismiss(toastId)
+              onConfirm()
+            }}
+            style={{
+              background: '#EF4444',
+              color: '#FFFFFF',
+              border: 'none',
+              padding: '0.5rem 1rem',
+              borderRadius: '6px',
+              fontSize: '0.875rem',
+              fontWeight: '500',
+              cursor: 'pointer',
+              transition: 'background 0.2s ease'
+            }}
+          >
+            Eliminar
+          </button>
+        </div>
+      </div>,
+      {
+        position: 'top-center',
+        autoClose: false,
+        hideProgressBar: true,
+        closeOnClick: false,
+        pauseOnHover: true,
+        draggable: false,
+        style: {
+          background: '#FFFFFF',
+          border: '1px solid #E5E7EB',
+          borderRadius: '12px',
+          boxShadow: '0 10px 25px rgba(0, 0, 0, 0.1)',
+          maxWidth: '400px',
+          width: '100%'
+        }
+      }
+    )
+  }
+  
   const [mostrarFormulario, setMostrarFormulario] = useState(false)
   const [editandoLista, setEditandoLista] = useState<ListaPrecios | null>(null)
   const [formData, setFormData] = useState({
@@ -77,7 +143,7 @@ export default function ListasPreciosPage() {
   const guardarLista = async () => {
     try {
       if (!formData.nombre.trim()) {
-        alert('El nombre es obligatorio')
+        toast.warn('El nombre es obligatorio')
         return
       }
 
@@ -109,11 +175,11 @@ export default function ListasPreciosPage() {
 
       if (error) {
         console.error('Error guardando lista:', error)
-        alert('Error al guardar la lista')
+        toast.error('Error al guardar la lista')
         return
       }
 
-      alert('Lista guardada exitosamente')
+      toast.success('Lista guardada exitosamente')
       setMostrarFormulario(false)
       setEditandoLista(null)
       setFormData({
@@ -152,34 +218,35 @@ export default function ListasPreciosPage() {
   }
 
   const eliminarLista = async (id: string) => {
-    if (!confirm('¿Estás seguro de que quieres eliminar esta lista de precios?')) {
-      return
-    }
+    confirmDelete(
+      '¿Estás seguro de que quieres eliminar esta lista de precios?',
+      async () => {
+        try {
+          const { error } = await supabase
+            .from('listas_precios')
+            .delete()
+            .eq('id', id)
 
-    try {
-      const { error } = await supabase
-        .from('listas_precios')
-        .delete()
-        .eq('id', id)
+          if (error) {
+            console.error('Error eliminando lista:', error)
+            toast.error('Error al eliminar la lista')
+            return
+          }
 
-      if (error) {
-        console.error('Error eliminando lista:', error)
-        alert('Error al eliminar la lista')
-        return
+          toast.success('Lista eliminada exitosamente')
+          await cargarListas()
+        } catch (error) {
+          console.error('Error:', error)
+          toast.error('Error al eliminar la lista')
+        }
       }
-
-      alert('Lista eliminada exitosamente')
-      await cargarListas()
-    } catch (error) {
-      console.error('Error:', error)
-      alert('Error al eliminar la lista')
-    }
+    )
   }
 
   const copiarURL = (url: string) => {
     const urlCompleta = `${window.location.origin}/lista-precios/${url}`
     navigator.clipboard.writeText(urlCompleta)
-    alert('URL copiada al portapapeles')
+    toast.success('URL copiada al portapapeles')
   }
 
   if (authLoading) {

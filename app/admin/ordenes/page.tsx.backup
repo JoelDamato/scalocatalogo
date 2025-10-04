@@ -19,9 +19,6 @@ interface Orden {
     subtotal: number
   }>
   total: number
-  descuento_aplicado?: number
-  total_con_descuento?: number
-  metodo_pago?: 'transferencia' | 'efectivo'
   estado: 'pendiente' | 'vendida' | 'cancelada'
   mensaje_whatsapp: string
   created_at: string
@@ -60,8 +57,6 @@ interface EstadisticasFacturacion {
   facturacionMes: number
   ordenesHoy: number
   ordenesMes: number
-  ticketPromedioDia: number
-  ticketPromedioMes: number
 }
 
 export default function AdminOrdenes() {
@@ -70,74 +65,6 @@ export default function AdminOrdenes() {
   const [loading, setLoading] = useState(true)
   const [filtroEstado, setFiltroEstado] = useState<string>('')
   const [isVisible, setIsVisible] = useState(false)
-  
-  // Estados para paginación
-  const [paginaActual, setPaginaActual] = useState(1)
-  const [ordenesPorPagina] = useState(10)
-  
-  // Función de confirmación con toast
-  const confirmDelete = (message: string, onConfirm: () => void) => {
-    const toastId = toast(
-      <div style={{ padding: '1rem' }}>
-        <div style={{ marginBottom: '1rem', fontSize: '1rem', fontWeight: '600', color: '#111827' }}>
-          {message}
-        </div>
-        <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
-          <button
-            onClick={() => toast.dismiss(toastId)}
-            style={{
-              background: '#6B7280',
-              color: '#FFFFFF',
-              border: 'none',
-              padding: '0.5rem 1rem',
-              borderRadius: '6px',
-              fontSize: '0.875rem',
-              fontWeight: '500',
-              cursor: 'pointer',
-              transition: 'background 0.2s ease'
-            }}
-          >
-            Cancelar
-          </button>
-          <button
-            onClick={() => {
-              toast.dismiss(toastId)
-              onConfirm()
-            }}
-            style={{
-              background: '#EF4444',
-              color: '#FFFFFF',
-              border: 'none',
-              padding: '0.5rem 1rem',
-              borderRadius: '6px',
-              fontSize: '0.875rem',
-              fontWeight: '500',
-              cursor: 'pointer',
-              transition: 'background 0.2s ease'
-            }}
-          >
-            Eliminar
-          </button>
-        </div>
-      </div>,
-      {
-        position: 'top-center',
-        autoClose: false,
-        hideProgressBar: true,
-        closeOnClick: false,
-        pauseOnHover: true,
-        draggable: false,
-        style: {
-          background: '#FFFFFF',
-          border: '1px solid #E5E7EB',
-          borderRadius: '12px',
-          boxShadow: '0 10px 25px rgba(0, 0, 0, 0.1)',
-          maxWidth: '400px',
-          width: '100%'
-        }
-      }
-    )
-  }
   
   // Estados para crear nueva orden
   const [mostrarFormularioNuevaOrden, setMostrarFormularioNuevaOrden] = useState(false)
@@ -166,9 +93,7 @@ export default function AdminOrdenes() {
     facturacionDia: 0,
     facturacionMes: 0,
     ordenesHoy: 0,
-    ordenesMes: 0,
-    ticketPromedioDia: 0,
-    ticketPromedioMes: 0
+    ordenesMes: 0
   })
 
   // Estados para edición de facturas
@@ -180,11 +105,6 @@ export default function AdminOrdenes() {
     setIsVisible(true)
     cargarDatos()
   }, [])
-
-  // Resetear página cuando cambie el filtro
-  useEffect(() => {
-    setPaginaActual(1)
-  }, [filtroEstado])
 
   const cargarDatos = async () => {
     await Promise.all([
@@ -198,31 +118,15 @@ export default function AdminOrdenes() {
 
   const cargarOrdenes = async () => {
     try {
-      console.log('📋 Cargando todas las órdenes...')
       const { data, error } = await supabase
         .from('ordenes')
-        .select('id, cliente_id, cliente_nombre, cliente_telefono, productos, total, descuento_aplicado, total_con_descuento, metodo_pago, estado, mensaje_whatsapp, created_at, updated_at')
+        .select('*')
         .order('created_at', { ascending: false })
 
       if (error) {
         console.error('Error cargando órdenes:', error)
         return
       }
-
-      console.log('📋 Todas las órdenes cargadas:', data)
-      console.log('📋 Total de órdenes:', data?.length || 0)
-      
-      // Mostrar detalles de cada orden
-      data?.forEach((orden, index) => {
-        console.log(`📋 Orden ${index + 1}:`, {
-          id: orden.id,
-          cliente_nombre: orden.cliente_nombre,
-          total: orden.total,
-          tipo_total: typeof orden.total,
-          estado: orden.estado,
-          created_at: orden.created_at
-        })
-      })
 
       setOrdenes(data || [])
     } catch (error) {
@@ -272,112 +176,49 @@ export default function AdminOrdenes() {
 
   const cargarEstadisticas = async () => {
     try {
-      console.log('🔍 Iniciando cargarEstadisticas...')
-      
       const hoy = new Date()
       const inicioDelDia = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate())
       const inicioDelMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1)
-      
-      console.log('📅 Fechas calculadas:', {
-        hoy: hoy.toISOString(),
-        inicioDelDia: inicioDelDia.toISOString(),
-        inicioDelMes: inicioDelMes.toISOString()
-      })
 
-      // Obtener solo órdenes vendidas del día
-      console.log('📊 Consultando órdenes vendidas del día...')
+      // Facturación del día
       const { data: ordenesHoy, error: errorHoy } = await supabase
         .from('ordenes')
-        .select('id, total, estado, created_at')
-        .gte('created_at', inicioDelDia.toISOString())
+        .select('total')
         .eq('estado', 'vendida')
+        .gte('created_at', inicioDelDia.toISOString())
 
-      // Obtener solo órdenes vendidas del mes
-      console.log('📊 Consultando órdenes vendidas del mes...')
+      // Facturación del mes
       const { data: ordenesMes, error: errorMes } = await supabase
         .from('ordenes')
-        .select('id, total, estado, created_at')
-        .gte('created_at', inicioDelMes.toISOString())
+        .select('total')
         .eq('estado', 'vendida')
+        .gte('created_at', inicioDelMes.toISOString())
 
-      // Contar órdenes vendidas del día
+      // Contar órdenes del día
       const { count: countHoy, error: errorCountHoy } = await supabase
         .from('ordenes')
         .select('*', { count: 'exact', head: true })
         .gte('created_at', inicioDelDia.toISOString())
-        .eq('estado', 'vendida')
 
-      // Contar órdenes vendidas del mes
+      // Contar órdenes del mes
       const { count: countMes, error: errorCountMes } = await supabase
         .from('ordenes')
         .select('*', { count: 'exact', head: true })
         .gte('created_at', inicioDelMes.toISOString())
-        .eq('estado', 'vendida')
-
-      console.log('📋 Resultados de consultas:', {
-        ordenesHoy: ordenesHoy?.length || 0,
-        ordenesMes: ordenesMes?.length || 0,
-        countHoy,
-        countMes,
-        errorHoy,
-        errorMes,
-        errorCountHoy,
-        errorCountMes
-      })
 
       if (!errorHoy && !errorMes && !errorCountHoy && !errorCountMes) {
-        // Debug: mostrar datos obtenidos
-        console.log('📊 Órdenes del día:', ordenesHoy)
-        console.log('📊 Órdenes del mes:', ordenesMes)
-        
-        // Calcular facturación total (todas las órdenes, no solo vendidas)
-        const facturacionDia = ordenesHoy?.reduce((sum, orden) => {
-          let total = 0
-          if (typeof orden.total === 'number') {
-            total = orden.total
-          } else if (typeof orden.total === 'string') {
-            total = parseFloat(orden.total) || 0
-          } else if (orden.total && typeof orden.total === 'object' && orden.total.value) {
-            total = parseFloat(orden.total.value) || 0
-          }
-          console.log(`💰 Orden del día - ID: ${orden.id}, Total original: ${orden.total}, Tipo: ${typeof orden.total}, Parseado: ${total}`)
-          return sum + total
-        }, 0) || 0
-        
-        const facturacionMes = ordenesMes?.reduce((sum, orden) => {
-          let total = 0
-          if (typeof orden.total === 'number') {
-            total = orden.total
-          } else if (typeof orden.total === 'string') {
-            total = parseFloat(orden.total) || 0
-          } else if (orden.total && typeof orden.total === 'object' && orden.total.value) {
-            total = parseFloat(orden.total.value) || 0
-          }
-          console.log(`💰 Orden del mes - ID: ${orden.id}, Total original: ${orden.total}, Tipo: ${typeof orden.total}, Parseado: ${total}`)
-          return sum + total
-        }, 0) || 0
-        
-        // Calcular ticket promedio (todas las órdenes)
-        const ticketPromedioDia = (ordenesHoy && ordenesHoy.length > 0) ? facturacionDia / ordenesHoy.length : 0
-        const ticketPromedioMes = (ordenesMes && ordenesMes.length > 0) ? facturacionMes / ordenesMes.length : 0
+        const facturacionDia = ordenesHoy?.reduce((sum, orden) => sum + (orden.total || 0), 0) || 0
+        const facturacionMes = ordenesMes?.reduce((sum, orden) => sum + (orden.total || 0), 0) || 0
 
-        const estadisticasCalculadas = {
+        setEstadisticas({
           facturacionDia,
           facturacionMes,
           ordenesHoy: countHoy || 0,
-          ordenesMes: countMes || 0,
-          ticketPromedioDia,
-          ticketPromedioMes
-        }
-
-        console.log('✅ Estadísticas calculadas:', estadisticasCalculadas)
-
-        setEstadisticas(estadisticasCalculadas)
-      } else {
-        console.error('❌ Errores en cargarEstadisticas:', { errorHoy, errorMes, errorCountHoy, errorCountMes })
+          ordenesMes: countMes || 0
+        })
       }
     } catch (error) {
-      console.error('💥 Error cargando estadísticas:', error)
+      console.error('Error cargando estadísticas:', error)
     }
   }
 
@@ -590,30 +431,29 @@ export default function AdminOrdenes() {
 
   // Función para eliminar factura
   const eliminarFactura = async (facturaId: string) => {
-    confirmDelete(
-      '¿Estás seguro de que deseas eliminar esta factura? Esta acción no se puede deshacer.',
-      async () => {
-        try {
-          const { error } = await supabase
-            .from('ordenes')
-            .delete()
-            .eq('id', facturaId)
+    if (!confirm('¿Estás seguro de que deseas eliminar esta factura? Esta acción no se puede deshacer.')) {
+      return
+    }
 
-          if (error) throw error
+    try {
+      const { error } = await supabase
+        .from('ordenes')
+        .delete()
+        .eq('id', facturaId)
 
-          // Actualizar estado local
-          setOrdenes(ordenes.filter(orden => orden.id !== facturaId))
-          
-          // Recargar estadísticas
-          await cargarEstadisticas()
-          
-          toast.success('Factura eliminada correctamente')
-        } catch (error) {
-          console.error('Error eliminando factura:', error)
-          toast.error('Error al eliminar la factura')
-        }
-      }
-    )
+      if (error) throw error
+
+      // Actualizar estado local
+      setOrdenes(ordenes.filter(orden => orden.id !== facturaId))
+      
+      // Recargar estadísticas
+      await cargarEstadisticas()
+      
+      alert('Factura eliminada correctamente')
+    } catch (error) {
+      console.error('Error eliminando factura:', error)
+      alert('Error al eliminar la factura')
+    }
   }
 
   const editarFactura = (factura: Orden) => {
@@ -704,7 +544,7 @@ export default function AdminOrdenes() {
   const descargarFacturasCSV = () => {
     try {
       // Crear encabezados CSV
-      const headers = ['ID Factura', 'Fecha', 'Cliente', 'Teléfono', 'Productos', 'Total', 'Método Pago', 'Descuento', 'Total Final', 'Estado']
+      const headers = ['ID Factura', 'Fecha', 'Cliente', 'Teléfono', 'Productos', 'Total', 'Estado']
       
       // Convertir facturas a filas CSV
       const filas = ordenes.map(orden => [
@@ -714,9 +554,6 @@ export default function AdminOrdenes() {
         `"${(orden.cliente_telefono || '').replace(/"/g, '""')}"`,
         `"${orden.productos.map(p => `${p.nombre} x${p.cantidad}`).join(', ').replace(/"/g, '""')}"`,
         orden.total.toFixed(2),
-        `"${orden.metodo_pago === 'efectivo' ? 'Efectivo' : orden.metodo_pago === 'transferencia' ? 'Transferencia' : 'N/A'}"`,
-        orden.descuento_aplicado ? orden.descuento_aplicado.toFixed(2) : '0.00',
-        orden.total_con_descuento ? orden.total_con_descuento.toFixed(2) : orden.total.toFixed(2),
         `"${orden.estado.toUpperCase()}"`
       ])
 
@@ -734,10 +571,10 @@ export default function AdminOrdenes() {
     link.click()
     document.body.removeChild(link)
       
-      toast.success('¡Facturas descargadas exitosamente!')
+      alert('¡Facturas descargadas exitosamente!')
     } catch (error) {
       console.error('Error descargando CSV:', error)
-      toast.error('Error al descargar las facturas')
+      alert('Error al descargar las facturas')
     }
   }
 
@@ -794,23 +631,34 @@ export default function AdminOrdenes() {
       doc.save(`factura-${factura.id.slice(-8)}.pdf`)
     } catch (error) {
       console.error('Error generando PDF:', error)
-      toast.error('Error al generar el PDF')
+      alert('Error al generar el PDF')
     }
   }
 
-  // Función para abrir WhatsApp con el cliente
-  const abrirWhatsAppCliente = (factura: Orden) => {
-    if (!factura.cliente_telefono) {
-      toast.warn('Este cliente no tiene número de teléfono registrado')
-      return
-    }
+  // Función para compartir factura por WhatsApp
+  const compartirFacturaPorWhatsApp = async (factura: Orden) => {
+    try {
+      // Generar el PDF primero
+      await generarPDFFactura(factura)
+      
+      // Crear mensaje para WhatsApp
+      const mensaje = `🧾 *FACTURA #${factura.id.slice(-8).toUpperCase()}*\n\n` +
+        `📅 Fecha: ${new Date(factura.created_at).toLocaleDateString('es-ES')}\n` +
+        `👤 Cliente: ${factura.cliente_nombre || 'Cliente Anónimo'}\n` +
+        `💰 Total: $${factura.total.toFixed(2)}\n` +
+        `📋 Estado: ${factura.estado.toUpperCase()}\n\n` +
+        `*Productos:*\n` +
+        factura.productos.map(p => `• ${p.nombre} x${p.cantidad} - $${p.subtotal.toFixed(2)}`).join('\n') +
+        `\n\n_El PDF de esta factura se ha descargado automáticamente._`
 
-    // Limpiar el número de teléfono (remover caracteres no numéricos)
-    const numeroLimpio = factura.cliente_telefono.replace(/\D/g, '')
-    
-    // Abrir WhatsApp directamente con el número del cliente
-    const whatsappUrl = `https://wa.me/${numeroLimpio}`
-    window.open(whatsappUrl, '_blank')
+      // Abrir WhatsApp con el mensaje
+      const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(mensaje)}`
+      window.open(whatsappUrl, '_blank')
+      
+    } catch (error) {
+      console.error('Error compartiendo por WhatsApp:', error)
+      alert('Error al compartir por WhatsApp')
+    }
   }
 
   if (authLoading || loading) {
@@ -884,32 +732,10 @@ export default function AdminOrdenes() {
     )
   }
 
-  // Filtrar órdenes
   const ordenesFiltradas = filtroEstado 
     ? ordenes.filter(orden => orden.estado === filtroEstado)
     : ordenes
-  
-  // Calcular paginación
-  const totalPaginas = Math.ceil(ordenesFiltradas.length / ordenesPorPagina)
-  const indiceInicio = (paginaActual - 1) * ordenesPorPagina
-  const indiceFin = indiceInicio + ordenesPorPagina
-  const ordenesPaginadas = ordenesFiltradas.slice(indiceInicio, indiceFin)
-  
-  // Función para cambiar página
-  const cambiarPagina = (nuevaPagina: number) => {
-    setPaginaActual(nuevaPagina)
-  }
-  
-  // Función para ir a la primera página
-  const irPrimeraPagina = () => {
-    setPaginaActual(1)
-  }
-  
-  // Función para ir a la última página
-  const irUltimaPagina = () => {
-    setPaginaActual(totalPaginas)
-  }
-  
+
     return (
       <div style={{
         minHeight: '100vh',
@@ -967,44 +793,6 @@ export default function AdminOrdenes() {
               {estadisticas.ordenesMes} órdenes
             </p>
           </div>
-
-          <div style={{
-            background: '#FFFFFF',
-            padding: '2rem',
-            borderRadius: '16px',
-            textAlign: 'center',
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
-            border: '1px solid #E5E7EB'
-          }}>
-            <h3 style={{ color: '#6B7280', margin: '0 0 0.75rem 0', fontSize: '0.875rem', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              Ticket Promedio Hoy
-            </h3>
-            <p style={{ color: '#111827', fontSize: '2.25rem', fontWeight: '700', margin: 0 }}>
-              ${estadisticas.ticketPromedioDia.toFixed(2)}
-            </p>
-            <p style={{ color: '#9CA3AF', fontSize: '0.875rem', margin: '0.5rem 0 0 0' }}>
-              por orden
-            </p>
-          </div>
-
-          <div style={{
-            background: '#FFFFFF',
-            padding: '2rem',
-            borderRadius: '16px',
-            textAlign: 'center',
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
-            border: '1px solid #E5E7EB'
-          }}>
-            <h3 style={{ color: '#6B7280', margin: '0 0 0.75rem 0', fontSize: '0.875rem', fontWeight: '500', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              Ticket Promedio Mes
-            </h3>
-            <p style={{ color: '#111827', fontSize: '2.25rem', fontWeight: '700', margin: 0 }}>
-              ${estadisticas.ticketPromedioMes.toFixed(2)}
-            </p>
-            <p style={{ color: '#9CA3AF', fontSize: '0.875rem', margin: '0.5rem 0 0 0' }}>
-              por orden
-            </p>
-          </div>
         </div>
 
         {/* Header y Controles */}
@@ -1027,26 +815,15 @@ export default function AdminOrdenes() {
             flexWrap: 'wrap',
             gap: '1rem'
           }}>
-            <div>
-              <h1 style={{
-                color: '#111827',
-                margin: 0,
-                fontSize: '1.875rem',
-                fontWeight: '700',
-                letterSpacing: '-0.025em'
-              }}>
-                Gestión de Ventas
-              </h1>
-              <p style={{
-                color: '#6B7280',
-                margin: '0.5rem 0 0 0',
-                fontSize: '0.875rem',
-                fontWeight: '500'
-              }}>
-                {ordenesFiltradas.length} {ordenesFiltradas.length === 1 ? 'orden' : 'órdenes'} 
-                {totalPaginas > 1 && ` • Página ${paginaActual} de ${totalPaginas}`}
-              </p>
-            </div>
+            <h1 style={{ 
+              color: '#111827', 
+              margin: 0,
+              fontSize: '1.875rem',
+              fontWeight: '700',
+              letterSpacing: '-0.025em'
+            }}>
+              Gestión de Ventas
+            </h1>
 
             <button
               onClick={() => setMostrarFormularioNuevaOrden(true)}
@@ -1147,7 +924,7 @@ export default function AdminOrdenes() {
           transform: isVisible ? 'translateY(0)' : 'translateY(30px)',
           transition: 'all 0.8s ease-out 0.4s'
         }}>
-          {ordenesPaginadas.map((orden, index) => (
+          {ordenesFiltradas.map((orden, index) => (
             <div key={orden.id} style={{
                   background: '#FFFFFF',
                   padding: '1.5rem',
@@ -1167,16 +944,6 @@ export default function AdminOrdenes() {
                   <p style={{ color: '#6B7280', margin: '0.5rem 0', fontSize: '0.875rem' }}>
                     📅 {new Date(orden.created_at).toLocaleDateString('es-ES')} - {new Date(orden.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
                   </p>
-                  {orden.metodo_pago && (
-                    <p style={{ color: '#6B7280', margin: '0.5rem 0', fontSize: '0.875rem' }}>
-                      💳 {orden.metodo_pago === 'efectivo' ? 'Efectivo' : 'Transferencia'}
-                      {orden.metodo_pago === 'efectivo' && orden.descuento_aplicado && orden.descuento_aplicado > 0 && (
-                        <span style={{ color: '#10B981', fontWeight: '600' }}>
-                          {' '}(-${orden.descuento_aplicado.toFixed(2)})
-                        </span>
-                      )}
-                    </p>
-                  )}
                   </div>
 
                 <div style={{ textAlign: 'right' }}>
@@ -1194,13 +961,8 @@ export default function AdminOrdenes() {
                     {orden.estado}
                   </div>
                   <p style={{ color: '#111827', fontSize: '1.5rem', fontWeight: '700', margin: 0 }}>
-                    ${orden.total_con_descuento ? orden.total_con_descuento.toFixed(2) : orden.total.toFixed(2)}
+                    ${orden.total.toFixed(2)}
                   </p>
-                  {orden.total_con_descuento && orden.total_con_descuento !== orden.total && (
-                    <p style={{ color: '#6B7280', fontSize: '0.75rem', margin: '0.25rem 0 0 0', textDecoration: 'line-through' }}>
-                      ${orden.total.toFixed(2)}
-                    </p>
-                  )}
                 </div>
               </div>
 
@@ -1365,31 +1127,29 @@ export default function AdminOrdenes() {
                     📄 Descargar PDF
                   </button>
                   
-                  {orden.cliente_telefono && (
-                    <button
-                      onClick={() => abrirWhatsAppCliente(orden)}
-                      style={{
-                        background: '#10B981',
-                        color: '#FFFFFF',
-                        border: '1px solid #10B981',
-                        padding: '0.5rem 1rem',
-                        borderRadius: '8px',
-                        fontSize: '0.875rem',
-                        fontWeight: '500',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease',
-                        minWidth: '140px'
-                      }}
-                      onMouseOver={(e) => {
-                        e.currentTarget.style.background = '#059669'
-                      }}
-                      onMouseOut={(e) => {
-                        e.currentTarget.style.background = '#10B981'
-                      }}
-                    >
-                      📱 WhatsApp
-                    </button>
-                  )}
+                  <button
+                    onClick={() => compartirFacturaPorWhatsApp(orden)}
+                    style={{
+                      background: '#10B981',
+                      color: '#FFFFFF',
+                      border: '1px solid #10B981',
+                      padding: '0.5rem 1rem',
+                      borderRadius: '8px',
+                      fontSize: '0.875rem',
+                      fontWeight: '500',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      minWidth: '140px'
+                    }}
+                    onMouseOver={(e) => {
+                      e.currentTarget.style.background = '#059669'
+                    }}
+                    onMouseOut={(e) => {
+                      e.currentTarget.style.background = '#10B981'
+                    }}
+                  >
+                    📱 WhatsApp
+                  </button>
                   
                   <button
                     onClick={() => eliminarFactura(orden.id)}
@@ -1439,152 +1199,6 @@ export default function AdminOrdenes() {
                 Crea tu primera factura usando el botón "Crear Nueva Factura"
               </p>
               </div>
-          )}
-
-          {/* Controles de paginación */}
-          {totalPaginas > 1 && (
-            <div style={{
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center',
-              gap: '0.5rem',
-              marginTop: '2rem',
-              padding: '1rem',
-              background: '#FFFFFF',
-              borderRadius: '12px',
-              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
-              border: '1px solid #E5E7EB'
-            }}>
-              {/* Botón Primera Página */}
-              <button
-                onClick={irPrimeraPagina}
-                disabled={paginaActual === 1}
-                style={{
-                  padding: '0.5rem 0.75rem',
-                  borderRadius: '8px',
-                  border: '1px solid #D1D5DB',
-                  background: paginaActual === 1 ? '#F9FAFB' : '#FFFFFF',
-                  color: paginaActual === 1 ? '#9CA3AF' : '#374151',
-                  cursor: paginaActual === 1 ? 'not-allowed' : 'pointer',
-                  fontSize: '0.875rem',
-                  fontWeight: '500',
-                  transition: 'all 0.2s ease'
-                }}
-                onMouseOver={(e) => {
-                  if (paginaActual !== 1) {
-                    e.currentTarget.style.background = '#F3F4F6'
-                  }
-                }}
-                onMouseOut={(e) => {
-                  if (paginaActual !== 1) {
-                    e.currentTarget.style.background = '#FFFFFF'
-                  }
-                }}
-              >
-                ⏮️ Primera
-              </button>
-
-              {/* Botón Página Anterior */}
-              <button
-                onClick={() => cambiarPagina(paginaActual - 1)}
-                disabled={paginaActual === 1}
-                style={{
-                  padding: '0.5rem 0.75rem',
-                  borderRadius: '8px',
-                  border: '1px solid #D1D5DB',
-                  background: paginaActual === 1 ? '#F9FAFB' : '#FFFFFF',
-                  color: paginaActual === 1 ? '#9CA3AF' : '#374151',
-                  cursor: paginaActual === 1 ? 'not-allowed' : 'pointer',
-                  fontSize: '0.875rem',
-                  fontWeight: '500',
-                  transition: 'all 0.2s ease'
-                }}
-                onMouseOver={(e) => {
-                  if (paginaActual !== 1) {
-                    e.currentTarget.style.background = '#F3F4F6'
-                  }
-                }}
-                onMouseOut={(e) => {
-                  if (paginaActual !== 1) {
-                    e.currentTarget.style.background = '#FFFFFF'
-                  }
-                }}
-              >
-                ⏪ Anterior
-              </button>
-
-              {/* Información de página */}
-              <div style={{
-                padding: '0.5rem 1rem',
-                background: '#F3F4F6',
-                borderRadius: '8px',
-                fontSize: '0.875rem',
-                fontWeight: '500',
-                color: '#374151',
-                minWidth: '120px',
-                textAlign: 'center'
-              }}>
-                Página {paginaActual} de {totalPaginas}
-              </div>
-
-              {/* Botón Página Siguiente */}
-              <button
-                onClick={() => cambiarPagina(paginaActual + 1)}
-                disabled={paginaActual === totalPaginas}
-                style={{
-                  padding: '0.5rem 0.75rem',
-                  borderRadius: '8px',
-                  border: '1px solid #D1D5DB',
-                  background: paginaActual === totalPaginas ? '#F9FAFB' : '#FFFFFF',
-                  color: paginaActual === totalPaginas ? '#9CA3AF' : '#374151',
-                  cursor: paginaActual === totalPaginas ? 'not-allowed' : 'pointer',
-                  fontSize: '0.875rem',
-                  fontWeight: '500',
-                  transition: 'all 0.2s ease'
-                }}
-                onMouseOver={(e) => {
-                  if (paginaActual !== totalPaginas) {
-                    e.currentTarget.style.background = '#F3F4F6'
-                  }
-                }}
-                onMouseOut={(e) => {
-                  if (paginaActual !== totalPaginas) {
-                    e.currentTarget.style.background = '#FFFFFF'
-                  }
-                }}
-              >
-                Siguiente ⏩
-              </button>
-
-              {/* Botón Última Página */}
-              <button
-                onClick={irUltimaPagina}
-                disabled={paginaActual === totalPaginas}
-                style={{
-                  padding: '0.5rem 0.75rem',
-                  borderRadius: '8px',
-                  border: '1px solid #D1D5DB',
-                  background: paginaActual === totalPaginas ? '#F9FAFB' : '#FFFFFF',
-                  color: paginaActual === totalPaginas ? '#9CA3AF' : '#374151',
-                  cursor: paginaActual === totalPaginas ? 'not-allowed' : 'pointer',
-                  fontSize: '0.875rem',
-                  fontWeight: '500',
-                  transition: 'all 0.2s ease'
-                }}
-                onMouseOver={(e) => {
-                  if (paginaActual !== totalPaginas) {
-                    e.currentTarget.style.background = '#F3F4F6'
-                  }
-                }}
-                onMouseOut={(e) => {
-                  if (paginaActual !== totalPaginas) {
-                    e.currentTarget.style.background = '#FFFFFF'
-                  }
-                }}
-              >
-                Última ⏭️
-              </button>
-            </div>
           )}
         </div>
                 </div>

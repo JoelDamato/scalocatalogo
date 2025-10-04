@@ -72,7 +72,7 @@ export default function TicketsPage() {
     e.preventDefault()
     
     if (!titulo.trim() || !descripcion.trim() || !email.trim()) {
-      alert('Por favor completa todos los campos')
+      toast.warn('Por favor completa todos los campos')
       return
     }
 
@@ -146,10 +146,10 @@ export default function TicketsPage() {
       setPrioridad('media')
       setMostrarFormulario(false)
       
-      alert('Ticket de soporte enviado correctamente. Te contactaremos pronto.')
+      toast.success('Ticket de soporte enviado correctamente. Te contactaremos pronto.')
     } catch (error) {
       console.error('Error creando ticket:', error)
-      alert('Error al enviar el ticket de soporte')
+      toast.error('Error al enviar el ticket de soporte')
     }
   }
 
@@ -157,10 +157,10 @@ export default function TicketsPage() {
     try {
       // Eliminar el ticket de la lista
       setTickets(tickets.filter(ticket => ticket.id !== ticketId))
-      alert('Ticket marcado como resuelto y eliminado de la lista')
+      toast.success('Ticket marcado como resuelto y eliminado de la lista')
     } catch (error) {
       console.error('Error marcando ticket como resuelto:', error)
-      alert('Error al marcar el ticket como resuelto')
+      toast.error('Error al marcar el ticket como resuelto')
     }
   }
 
