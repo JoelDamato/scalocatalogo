@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../../../src/lib/supabase'
 import { useConfiguracion } from '../../../src/hooks/useConfiguracion'
 import Link from 'next/link'
+import { toast } from 'react-toastify'
 
 interface Producto {
   id: string

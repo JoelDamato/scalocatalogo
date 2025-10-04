@@ -7,6 +7,7 @@ import AdminAuth from "../../../src/components/AdminAuth"
 import AdminNavbar from "../../../src/components/AdminNavbar"
 import { useAuth } from "../../../src/hooks/useAuth"
 import CloudinaryService from '../../../src/services/cloudinaryService'
+import { toast } from 'react-toastify'
 
 interface ConfiguracionSistema {
   id?: string

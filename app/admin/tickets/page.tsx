@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import AdminNavbar from '../../../src/components/AdminNavbar'
 import { useAuth } from '../../../src/hooks/useAuth_simple'
+import { toast } from 'react-toastify'
 
 interface Ticket {
   id: string
