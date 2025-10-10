@@ -2,9 +2,23 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useState, useEffect } from 'react'
 
 export default function AdminNavbar() {
   const pathname = usePathname()
+  const [isMobile, setIsMobile] = useState(true) // Inicializar como true para evitar flash
+
+  // Detectar tamaño de pantalla
+  useEffect(() => {
+    const checkScreenSize = () => {
+      setIsMobile(window.innerWidth <= 768)
+    }
+    
+    checkScreenSize()
+    window.addEventListener('resize', checkScreenSize)
+    
+    return () => window.removeEventListener('resize', checkScreenSize)
+  }, [])
 
   const navItems = [
     { 
@@ -114,12 +128,13 @@ export default function AdminNavbar() {
       <div style={{
         maxWidth: '1400px',
         margin: '0 auto',
-        padding: '0 1.5rem',
+        padding: '0 1rem',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: '0.5rem',
-        flexWrap: 'wrap'
+        gap: isMobile ? '0.1rem' : '0.25rem',
+        flexWrap: 'wrap',
+        justifyContent: 'space-between'
       }}>
         {navItems.map((item) => {
           const isActive = pathname === item.href
@@ -129,16 +144,18 @@ export default function AdminNavbar() {
               href={item.href}
               style={{
                 textDecoration: 'none',
-                padding: '0.875rem 1.25rem',
-                borderRadius: '10px',
-                fontSize: '0.875rem',
+                padding: isMobile ? '0.4rem 0.5rem' : '0.875rem 1.25rem',
+                borderRadius: '8px',
+                fontSize: isMobile ? '0.7rem' : '0.875rem',
                 fontWeight: '500',
                 fontFamily: 'system-ui, -apple-system, sans-serif',
                 transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '0.5rem',
+                gap: isMobile ? '0.25rem' : '0.5rem',
                 position: 'relative',
+                minWidth: 'auto',
+                whiteSpace: 'nowrap',
                 background: isActive 
                   ? 'linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 100%)'
                   : 'rgba(255, 255, 255, 0.05)',

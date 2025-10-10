@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useState, useEffect } from 'react'
+import { usePathname } from 'next/navigation'
 import { toast } from 'react-toastify'
 import { isAuthenticated, authenticate, cleanupOldAuth } from '../utils/auth'
 
@@ -9,11 +10,13 @@ export default function Navbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [isScrolled, setIsScrolled] = useState(false)
   const [showAdminLogin, setShowAdminLogin] = useState(false)
+  const pathname = usePathname()
 
   // Limpiar autenticación duplicada al cargar
   useEffect(() => {
     cleanupOldAuth()
   }, [])
+
 
   useEffect(() => {
     const handleScroll = () => {
@@ -41,6 +44,7 @@ export default function Navbar() {
       setShowAdminLogin(true)
     }
   }
+
 
   return (
     <nav style={{
@@ -79,6 +83,7 @@ export default function Navbar() {
            
           </span>
         </Link>
+
 
         {/* Desktop Navigation */}
         <div className="desktop-nav" style={{

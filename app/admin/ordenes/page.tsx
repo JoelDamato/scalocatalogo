@@ -24,6 +24,7 @@ interface Orden {
   metodo_pago?: 'transferencia' | 'efectivo'
   estado: 'pendiente' | 'vendida' | 'cancelada'
   mensaje_whatsapp: string
+  lista_precio_id?: string | null
   created_at: string
   updated_at: string
 }
@@ -144,6 +145,7 @@ export default function AdminOrdenes() {
   const [productos, setProductos] = useState<Producto[]>([])
   const [listasPrecios, setListasPrecios] = useState<ListaPrecios[]>([])
   const [listaSeleccionada, setListaSeleccionada] = useState<string>('precio_base')
+  const [filtroListaPrecio, setFiltroListaPrecio] = useState<string>('todas')
   const [productosSeleccionados, setProductosSeleccionados] = useState<{[key: string]: number}>({})
   const [clienteNombre, setClienteNombre] = useState('')
   const [clienteTelefono, setClienteTelefono] = useState('')
@@ -186,6 +188,13 @@ export default function AdminOrdenes() {
     setPaginaActual(1)
   }, [filtroEstado])
 
+  // Recargar órdenes cuando cambie el filtro de lista de precios
+  useEffect(() => {
+    if (isVisible) {
+      cargarOrdenes()
+    }
+  }, [filtroListaPrecio])
+
   const cargarDatos = async () => {
     await Promise.all([
       cargarOrdenes(),
@@ -201,7 +210,7 @@ export default function AdminOrdenes() {
       console.log('📋 Cargando todas las órdenes...')
       const { data, error } = await supabase
         .from('ordenes')
-        .select('id, cliente_id, cliente_nombre, cliente_telefono, productos, total, descuento_aplicado, total_con_descuento, metodo_pago, estado, mensaje_whatsapp, created_at, updated_at')
+        .select('id, cliente_id, cliente_nombre, cliente_telefono, productos, total, descuento_aplicado, total_con_descuento, metodo_pago, estado, mensaje_whatsapp, lista_precio_id, created_at, updated_at')
         .order('created_at', { ascending: false })
 
       if (error) {
@@ -212,19 +221,30 @@ export default function AdminOrdenes() {
       console.log('📋 Todas las órdenes cargadas:', data)
       console.log('📋 Total de órdenes:', data?.length || 0)
       
+      // Aplicar filtro por lista de precios
+      let ordenesFiltradas = data || []
+      if (filtroListaPrecio !== 'todas') {
+        if (filtroListaPrecio === 'precio_base') {
+          ordenesFiltradas = ordenesFiltradas.filter(orden => !orden.lista_precio_id)
+        } else {
+          ordenesFiltradas = ordenesFiltradas.filter(orden => orden.lista_precio_id === filtroListaPrecio)
+        }
+      }
+      
       // Mostrar detalles de cada orden
-      data?.forEach((orden, index) => {
+      ordenesFiltradas?.forEach((orden, index) => {
         console.log(`📋 Orden ${index + 1}:`, {
           id: orden.id,
           cliente_nombre: orden.cliente_nombre,
           total: orden.total,
           tipo_total: typeof orden.total,
           estado: orden.estado,
+          lista_precio_id: orden.lista_precio_id,
           created_at: orden.created_at
         })
       })
 
-      setOrdenes(data || [])
+      setOrdenes(ordenesFiltradas)
     } catch (error) {
       console.error('Error:', error)
     } finally {
@@ -288,7 +308,7 @@ export default function AdminOrdenes() {
       console.log('📊 Consultando órdenes vendidas del día...')
       const { data: ordenesHoy, error: errorHoy } = await supabase
         .from('ordenes')
-        .select('id, total, estado, created_at')
+        .select('id, total, total_con_descuento, metodo_pago, estado, created_at')
         .gte('created_at', inicioDelDia.toISOString())
         .eq('estado', 'vendida')
 
@@ -296,7 +316,7 @@ export default function AdminOrdenes() {
       console.log('📊 Consultando órdenes vendidas del mes...')
       const { data: ordenesMes, error: errorMes } = await supabase
         .from('ordenes')
-        .select('id, total, estado, created_at')
+        .select('id, total, total_con_descuento, metodo_pago, estado, created_at')
         .gte('created_at', inicioDelMes.toISOString())
         .eq('estado', 'vendida')
 
@@ -330,30 +350,54 @@ export default function AdminOrdenes() {
         console.log('📊 Órdenes del día:', ordenesHoy)
         console.log('📊 Órdenes del mes:', ordenesMes)
         
-        // Calcular facturación total (todas las órdenes, no solo vendidas)
+        // Calcular facturación total según método de pago
         const facturacionDia = ordenesHoy?.reduce((sum, orden) => {
           let total = 0
-          if (typeof orden.total === 'number') {
-            total = orden.total
-          } else if (typeof orden.total === 'string') {
-            total = parseFloat(orden.total) || 0
-          } else if (orden.total && typeof orden.total === 'object' && orden.total.value) {
-            total = parseFloat(orden.total.value) || 0
+          
+          // Si es efectivo, usar total_con_descuento, sino usar total
+          if (orden.metodo_pago === 'efectivo' && orden.total_con_descuento) {
+            if (typeof orden.total_con_descuento === 'number') {
+              total = orden.total_con_descuento
+            } else if (typeof orden.total_con_descuento === 'string') {
+              total = parseFloat(orden.total_con_descuento) || 0
+            }
+          } else {
+            // Para transferencia o si no hay total_con_descuento, usar total
+            if (typeof orden.total === 'number') {
+              total = orden.total
+            } else if (typeof orden.total === 'string') {
+              total = parseFloat(orden.total) || 0
+            } else if (orden.total && typeof orden.total === 'object' && orden.total.value) {
+              total = parseFloat(orden.total.value) || 0
+            }
           }
-          console.log(`💰 Orden del día - ID: ${orden.id}, Total original: ${orden.total}, Tipo: ${typeof orden.total}, Parseado: ${total}`)
+          
+          console.log(`💰 Orden del día - ID: ${orden.id}, Método: ${orden.metodo_pago}, Total: ${orden.total}, Total con descuento: ${orden.total_con_descuento}, Usado: ${total}`)
           return sum + total
         }, 0) || 0
         
         const facturacionMes = ordenesMes?.reduce((sum, orden) => {
           let total = 0
-          if (typeof orden.total === 'number') {
-            total = orden.total
-          } else if (typeof orden.total === 'string') {
-            total = parseFloat(orden.total) || 0
-          } else if (orden.total && typeof orden.total === 'object' && orden.total.value) {
-            total = parseFloat(orden.total.value) || 0
+          
+          // Si es efectivo, usar total_con_descuento, sino usar total
+          if (orden.metodo_pago === 'efectivo' && orden.total_con_descuento) {
+            if (typeof orden.total_con_descuento === 'number') {
+              total = orden.total_con_descuento
+            } else if (typeof orden.total_con_descuento === 'string') {
+              total = parseFloat(orden.total_con_descuento) || 0
+            }
+          } else {
+            // Para transferencia o si no hay total_con_descuento, usar total
+            if (typeof orden.total === 'number') {
+              total = orden.total
+            } else if (typeof orden.total === 'string') {
+              total = parseFloat(orden.total) || 0
+            } else if (orden.total && typeof orden.total === 'object' && orden.total.value) {
+              total = parseFloat(orden.total.value) || 0
+            }
           }
-          console.log(`💰 Orden del mes - ID: ${orden.id}, Total original: ${orden.total}, Tipo: ${typeof orden.total}, Parseado: ${total}`)
+          
+          console.log(`💰 Orden del mes - ID: ${orden.id}, Método: ${orden.metodo_pago}, Total: ${orden.total}, Total con descuento: ${orden.total_con_descuento}, Usado: ${total}`)
           return sum + total
         }, 0) || 0
         
@@ -530,7 +574,8 @@ export default function AdminOrdenes() {
           productos: productosOrden,
           total,
           estado: 'pendiente',
-          mensaje_whatsapp: mensajeWhatsApp
+          mensaje_whatsapp: mensajeWhatsApp,
+          lista_precio_id: listaSeleccionada === 'precio_base' ? null : listaSeleccionada
         })
         .select()
 
@@ -749,46 +794,106 @@ export default function AdminOrdenes() {
 
       // Configuración del documento
       doc.setFont('helvetica', 'bold')
-      doc.setFontSize(20)
+      doc.setFontSize(24)
       doc.text('FACTURA', 105, 30, { align: 'center' })
 
+      // Dibujar borde principal
+      doc.setDrawColor(0, 0, 0) // Negro
+      doc.setLineWidth(0.5)
+      doc.rect(15, 15, 180, 260) // Borde exterior
+
       // Información de la empresa
-    doc.setFontSize(12)
-      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(14)
+      doc.setFont('helvetica', 'bold')
       doc.text('M DESCARTABLES', 20, 50)
+      
+      doc.setFontSize(10)
+      doc.setFont('helvetica', 'normal')
       doc.text('Fecha: ' + new Date(factura.created_at).toLocaleDateString('es-ES'), 20, 60)
       doc.text('Factura #: ' + factura.id.slice(-8).toUpperCase(), 20, 70)
 
+      // Línea separadora
+      doc.line(20, 80, 190, 80)
+
       // Información del cliente
       doc.setFont('helvetica', 'bold')
-      doc.text('CLIENTE:', 20, 90)
+      doc.setFontSize(12)
+      doc.text('CLIENTE:', 20, 95)
       doc.setFont('helvetica', 'normal')
-      doc.text(factura.cliente_nombre || 'Cliente Anónimo', 20, 100)
+      doc.setFontSize(10)
+      doc.text(factura.cliente_nombre || 'Cliente Anónimo', 20, 105)
       if (factura.cliente_telefono) {
-        doc.text('Tel: ' + factura.cliente_telefono, 20, 110)
+        doc.text('Tel: ' + factura.cliente_telefono, 20, 115)
       }
+
+      // Línea separadora
+      doc.line(20, 125, 190, 125)
 
       // Tabla de productos
       doc.setFont('helvetica', 'bold')
-      doc.text('PRODUCTOS:', 20, 130)
+      doc.setFontSize(12)
+      doc.text('PRODUCTOS:', 20, 140)
       
-      let yPosition = 140
+      // Encabezados de la tabla
+      const tableY = 150
+      doc.setFontSize(10)
+      doc.setFont('helvetica', 'bold')
+      
+      // Dibujar encabezados de tabla
+      doc.rect(20, tableY - 5, 120, 8) // Columna producto
+      doc.rect(140, tableY - 5, 25, 8) // Columna cantidad
+      doc.rect(165, tableY - 5, 25, 8) // Columna subtotal
+      
+      doc.text('PRODUCTO', 25, tableY)
+      doc.text('CANT.', 145, tableY)
+      doc.text('SUBTOTAL', 170, tableY)
+      
+      // Línea debajo de encabezados
+      doc.line(20, tableY + 3, 190, tableY + 3)
+      
+      let yPosition = tableY + 10
       doc.setFont('helvetica', 'normal')
       
-      factura.productos.forEach((producto) => {
-        doc.text(`${producto.nombre} x${producto.cantidad}`, 20, yPosition)
-        doc.text(`$${producto.subtotal.toFixed(2)}`, 150, yPosition)
+      factura.productos.forEach((producto, index) => {
+        // Dibujar filas de la tabla
+        doc.rect(20, yPosition - 5, 120, 8) // Columna producto
+        doc.rect(140, yPosition - 5, 25, 8) // Columna cantidad
+        doc.rect(165, yPosition - 5, 25, 8) // Columna subtotal
+        
+        // Texto de la fila
+        doc.text(producto.nombre, 25, yPosition)
+        doc.text(producto.cantidad.toString(), 145, yPosition)
+        doc.text(`$${producto.subtotal.toFixed(2)}`, 170, yPosition)
+        
         yPosition += 10
-    })
-    
-    // Total
+      })
+      
+      // Línea separadora antes del total
+      doc.line(20, yPosition + 5, 190, yPosition + 5)
+      
+      // Total
       doc.setFont('helvetica', 'bold')
-    doc.setFontSize(14)
-      doc.text('TOTAL: $' + factura.total.toFixed(2), 150, yPosition + 10)
+      doc.setFontSize(14)
+      doc.text('TOTAL: $' + factura.total.toFixed(2), 150, yPosition + 15)
 
-      // Estado
-      doc.setFontSize(12)
-      doc.text('Estado: ' + factura.estado.toUpperCase(), 20, yPosition + 20)
+      // Información adicional
+      doc.setFontSize(10)
+      doc.setFont('helvetica', 'normal')
+      doc.text('Estado: ' + factura.estado.toUpperCase(), 20, yPosition + 25)
+      
+      if (factura.metodo_pago) {
+        doc.text('Método de pago: ' + factura.metodo_pago.toUpperCase(), 20, yPosition + 35)
+      }
+      
+      if (factura.descuento_aplicado && factura.descuento_aplicado > 0) {
+        doc.text('Descuento aplicado: $' + factura.descuento_aplicado.toFixed(2), 20, yPosition + 45)
+        doc.text('Total con descuento: $' + (factura.total_con_descuento || factura.total).toFixed(2), 20, yPosition + 55)
+      }
+
+      // Pie de página
+      doc.setFontSize(8)
+      doc.setFont('helvetica', 'italic')
+      doc.text('Gracias por su compra', 105, 270, { align: 'center' })
 
       // Descargar
       doc.save(`factura-${factura.id.slice(-8)}.pdf`)
@@ -1134,6 +1239,30 @@ export default function AdminOrdenes() {
               <option value="pendiente">Pendiente</option>
               <option value="vendida">Pagada</option>
               <option value="cancelada">Cancelada</option>
+            </select>
+
+            <select
+              value={filtroListaPrecio}
+              onChange={(e) => setFiltroListaPrecio(e.target.value)}
+              style={{
+                padding: '0.75rem 1rem',
+                borderRadius: '8px',
+                border: '1px solid #D1D5DB',
+                background: '#FFFFFF',
+                color: '#374151',
+                fontSize: '0.875rem',
+                fontWeight: '400',
+                fontFamily: 'system-ui, -apple-system, sans-serif',
+                outline: 'none'
+              }}
+            >
+              <option value="todas">Todas las listas</option>
+              <option value="precio_base">Precio Base</option>
+              {listasPrecios.map(lista => (
+                <option key={lista.id} value={lista.id}>
+                  {lista.nombre}
+                </option>
+              ))}
             </select>
           </div>
         </div>

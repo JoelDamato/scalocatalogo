@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Montserrat } from "next/font/google";
 import "./globals.css";
-import Navbar from "../src/components/Navbar";
+import ConditionalNavbar from "../src/components/ConditionalNavbar";
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
@@ -24,7 +24,7 @@ export default function RootLayout({
   return (
     <html lang="es">
       <body className={montserrat.variable}>
-        <Navbar />
+        <ConditionalNavbar />
         {children}
         <ToastContainer
           position="top-right"

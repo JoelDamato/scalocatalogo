@@ -32,6 +32,7 @@ export default function ProductosPage() {
   const [carruselIndice, setCarruselIndice] = useState(0)
   const [metodoPago, setMetodoPago] = useState<'transferencia' | 'efectivo'>('transferencia')
   const [aplicarDescuento, setAplicarDescuento] = useState(true)
+  const [isMobile, setIsMobile] = useState(true) // Inicializar como true para evitar flash
   const { configuracion } = useConfiguracion()
 
   useEffect(() => {
@@ -44,10 +45,12 @@ export default function ProductosPage() {
     filtrarProductos()
   }, [productos, busqueda, categoriaFiltro])
 
-  // Forzar vista de lista en móvil
+  // Forzar vista de lista en móvil y detectar tamaño de pantalla
   useEffect(() => {
     const checkScreenSize = () => {
-      if (window.innerWidth <= 768) {
+      const mobile = window.innerWidth <= 768
+      setIsMobile(mobile)
+      if (mobile) {
         setVistaLista(true)
       }
     }
@@ -57,6 +60,7 @@ export default function ProductosPage() {
     
     return () => window.removeEventListener('resize', checkScreenSize)
   }, [])
+
 
   // Carrusel manual solamente (sin movimiento automático)
   // useEffect(() => {
@@ -354,7 +358,7 @@ export default function ProductosPage() {
         zIndex: 3,
         maxWidth: '1400px',
         margin: '0 auto',
-        padding: '5rem 0.75rem 2rem 0.75rem',
+        padding: isMobile ? '5.5rem 0.75rem 2rem 0.75rem' : '5rem 0.75rem 2rem 0.75rem',
         minHeight: '100vh'
       }}>
         {/* Header */}
@@ -365,6 +369,98 @@ export default function ProductosPage() {
           transform: isVisible ? 'translateY(0)' : 'translateY(30px)',
           transition: 'all 1s ease-out'
         }}>
+          {/* Controles de ordenamiento y filtro - Solo en móvil */}
+          {isMobile && (
+            <div style={{
+              display: 'flex',
+              gap: '0.5rem',
+              marginBottom: '1.5rem',
+              marginTop: '0.5rem',
+              flexWrap: 'wrap',
+              justifyContent: 'center',
+              alignItems: 'center'
+            }}>
+              {/* Buscador */}
+              <input
+                type="text"
+                placeholder="Buscar productos..."
+                value={busqueda}
+                onChange={(e) => setBusqueda(e.target.value)}
+                style={{
+                  padding: '0.4rem 0.6rem',
+                  borderRadius: '6px',
+                  border: '1px solid #D1D5DB',
+                  fontSize: '0.8rem',
+                  background: '#FFFFFF',
+                  color: '#374151',
+                  minWidth: '150px',
+                  outline: 'none'
+                }}
+              />
+
+              {/* Filtro de categoría */}
+              <select
+                value={categoriaFiltro}
+                onChange={(e) => setCategoriaFiltro(e.target.value)}
+                style={{
+                  padding: '0.4rem 0.6rem',
+                  borderRadius: '6px',
+                  border: '1px solid #D1D5DB',
+                  fontSize: '0.8rem',
+                  background: '#FFFFFF',
+                  color: '#374151',
+                  minWidth: '120px',
+                  outline: 'none'
+                }}
+              >
+                <option value="">Todas las categorías</option>
+                {categorias.map(categoria => (
+                  <option key={categoria} value={categoria}>
+                    {categoria}
+                  </option>
+                ))}
+              </select>
+
+              {/* Ordenamiento por precio */}
+              <select
+                onChange={(e) => {
+                  const orden = e.target.value
+                  if (orden === 'precio-asc') {
+                    setProductosFiltrados(prev => [...prev].sort((a, b) => (a.precio || 0) - (b.precio || 0)))
+                  } else if (orden === 'precio-desc') {
+                    setProductosFiltrados(prev => [...prev].sort((a, b) => (b.precio || 0) - (a.precio || 0)))
+                  } else if (orden === 'nombre-asc') {
+                    setProductosFiltrados(prev => [...prev].sort((a, b) => a.nombre.localeCompare(b.nombre)))
+                  } else {
+                    // Orden por defecto
+                    setProductosFiltrados(productos.filter(producto => {
+                      const cumpleBusqueda = busqueda === '' || 
+                        producto.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
+                        (producto.descripcion && producto.descripcion.toLowerCase().includes(busqueda.toLowerCase()))
+                      const cumpleCategoria = categoriaFiltro === '' || producto.categoria === categoriaFiltro
+                      return cumpleBusqueda && cumpleCategoria
+                    }))
+                  }
+                }}
+                style={{
+                  padding: '0.4rem 0.6rem',
+                  borderRadius: '6px',
+                  border: '1px solid #D1D5DB',
+                  fontSize: '0.8rem',
+                  background: '#FFFFFF',
+                  color: '#374151',
+                  minWidth: '120px',
+                  outline: 'none'
+                }}
+              >
+                <option value="">Ordenar por...</option>
+                <option value="nombre-asc">Nombre A-Z</option>
+                <option value="precio-asc">Precio: Menor a Mayor</option>
+                <option value="precio-desc">Precio: Mayor a Menor</option>
+              </select>
+            </div>
+          )}
+
           <h1 style={{
             fontSize: 'clamp(1.8rem, 4.5vw, 3.5rem)',
             fontWeight: '800',
@@ -379,8 +475,8 @@ export default function ProductosPage() {
         
         </div>
 
-        {/* Carrusel de Productos Destacados */}
-        {productosDestacados.length > 0 && (
+        {/* Carrusel de Productos Destacados - Solo en desktop */}
+        {productosDestacados.length > 0 && !isMobile && (
           <div style={{
             marginBottom: '3rem',
             opacity: isVisible ? 1 : 0,
@@ -393,7 +489,7 @@ export default function ProductosPage() {
             
             <div style={{
               position: 'relative',
-              width: '80%',
+              width: '95%',
               maxWidth: '1200px',
               margin: '0 auto',
               overflow: 'hidden',
@@ -414,21 +510,24 @@ export default function ProductosPage() {
                   <div key={producto.id} style={{
                     width: '100%',
                     flexShrink: 0,
-                    padding: '3rem',
+                    padding: isMobile ? '1.5rem' : '3rem',
                     display: 'flex',
+                    flexDirection: isMobile ? 'column' : 'row',
                     alignItems: 'center',
-                    gap: '3rem',
-                    minHeight: '400px'
+                    gap: isMobile ? '1.5rem' : '3rem',
+                    minHeight: isMobile ? 'auto' : '400px',
+                    textAlign: isMobile ? 'center' : 'left'
                   }}>
                     {/* Imagen del producto */}
                     <div style={{
-                      width: '280px',
-                      height: '280px',
+                      width: isMobile ? '200px' : '280px',
+                      height: isMobile ? '200px' : '280px',
                       borderRadius: '15px',
                       overflow: 'hidden',
                       flexShrink: 0,
                       boxShadow: '0 12px 30px rgba(0, 0, 0, 0.2)',
-                      background: '#F8F9FA'
+                      background: '#F8F9FA',
+                      margin: isMobile ? '0 auto' : '0'
                     }}>
                       {producto.foto_url ? (
                         <img
@@ -462,13 +561,13 @@ export default function ProductosPage() {
                       flex: 1,
                       display: 'flex',
                       flexDirection: 'column',
-                      alignItems: 'flex-start',
-                      textAlign: 'left',
+                      alignItems: isMobile ? 'center' : 'flex-start',
+                      textAlign: isMobile ? 'center' : 'left',
                       justifyContent: 'center',
-                      paddingLeft: '1rem'
+                      paddingLeft: isMobile ? '0' : '1rem'
                     }}>
                       <h3 style={{
-                        fontSize: '2.5rem',
+                        fontSize: isMobile ? '1.8rem' : '2.5rem',
                         fontWeight: '700',
                         color: '#111827',
                         marginBottom: '1.5rem',
@@ -479,11 +578,11 @@ export default function ProductosPage() {
                       
                       {producto.descripcion && (
                         <p style={{
-                          fontSize: '1.3rem',
+                          fontSize: isMobile ? '1.1rem' : '1.3rem',
                           color: '#6B7280',
                           lineHeight: '1.6',
                           marginBottom: '1.5rem',
-                          maxWidth: '600px'
+                          maxWidth: isMobile ? '100%' : '600px'
                         }}>
                           {producto.descripcion}
                         </p>
@@ -494,9 +593,9 @@ export default function ProductosPage() {
                           display: 'inline-block',
                           background: 'rgba(139, 92, 246, 0.1)',
                           color: '#8B5CF6',
-                          padding: '0.75rem 1.5rem',
+                          padding: isMobile ? '0.5rem 1rem' : '0.75rem 1.5rem',
                           borderRadius: '30px',
-                          fontSize: '1.1rem',
+                          fontSize: isMobile ? '0.9rem' : '1.1rem',
                           fontWeight: '600',
                           marginBottom: '2rem'
                         }}>
@@ -506,7 +605,7 @@ export default function ProductosPage() {
                       
                       {producto.precio && (
                         <div style={{
-                          fontSize: '3.5rem',
+                          fontSize: isMobile ? '2.5rem' : '3.5rem',
                           fontWeight: '800',
                           color: '#10B981',
                           marginBottom: '0'
@@ -558,19 +657,19 @@ export default function ProductosPage() {
                 )}
                 style={{
                   position: 'absolute',
-                  left: '0.5rem',
+                  left: isMobile ? '0.25rem' : '0.5rem',
                   top: '50%',
                   transform: 'translateY(-50%)',
                   background: 'rgba(255, 255, 255, 0.9)',
                   border: '1px solid rgba(139, 92, 246, 0.2)',
-                  width: '32px',
-                  height: '32px',
+                  width: isMobile ? '28px' : '32px',
+                  height: isMobile ? '28px' : '32px',
                   borderRadius: '50%',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   cursor: 'pointer',
-                  fontSize: '0.9rem',
+                  fontSize: isMobile ? '0.8rem' : '0.9rem',
                   color: '#8B5CF6',
                   transition: 'all 0.3s ease',
                   zIndex: 2,
@@ -595,19 +694,19 @@ export default function ProductosPage() {
                 )}
                 style={{
                   position: 'absolute',
-                  right: '0.5rem',
+                  right: isMobile ? '0.25rem' : '0.5rem',
                   top: '50%',
                   transform: 'translateY(-50%)',
                   background: 'rgba(255, 255, 255, 0.9)',
                   border: '1px solid rgba(139, 92, 246, 0.2)',
-                  width: '32px',
-                  height: '32px',
+                  width: isMobile ? '28px' : '32px',
+                  height: isMobile ? '28px' : '32px',
                   borderRadius: '50%',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   cursor: 'pointer',
-                  fontSize: '0.9rem',
+                  fontSize: isMobile ? '0.8rem' : '0.9rem',
                   color: '#8B5CF6',
                   transition: 'all 0.3s ease',
                   zIndex: 2,
@@ -629,7 +728,8 @@ export default function ProductosPage() {
           </div>
         )}
 
-        {/* Filters */}
+        {/* Filters - Solo en desktop */}
+        {!isMobile && (
         <div style={{
           background: 'rgba(255, 255, 255, 0.1)',
           padding: '2rem',
@@ -764,6 +864,7 @@ export default function ProductosPage() {
             </div>
           </div>
         </div>
+        )}
 
         {/* Products Grid/List */}
         <div style={{

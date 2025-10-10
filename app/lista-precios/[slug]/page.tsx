@@ -49,6 +49,8 @@ export default function ListaPreciosPage({ params }: PageProps) {
   const [metodoPago, setMetodoPago] = useState<'transferencia' | 'efectivo'>('transferencia')
   const [aplicarDescuento, setAplicarDescuento] = useState(true)
   const [slug, setSlug] = useState<string>('')
+  const [margenesPersonalizados, setMargenesPersonalizados] = useState<{[productoId: string]: number}>({})
+  const [isMobile, setIsMobile] = useState(true) // Inicializar como true para evitar flash
   const { configuracion } = useConfiguracion()
 
   useEffect(() => {
@@ -68,8 +70,30 @@ export default function ListaPreciosPage({ params }: PageProps) {
   }, [slug])
 
   useEffect(() => {
+    if (lista?.id) {
+      cargarMargenesPersonalizados()
+    }
+  }, [lista])
+
+  useEffect(() => {
     filtrarProductos()
   }, [productos, busqueda, categoriaFiltro])
+
+  // Detectar tamaño de pantalla
+  useEffect(() => {
+    const checkScreenSize = () => {
+      const mobile = window.innerWidth <= 768
+      setIsMobile(mobile)
+      if (mobile) {
+        setVistaLista(true)
+      }
+    }
+    
+    checkScreenSize()
+    window.addEventListener('resize', checkScreenSize)
+    
+    return () => window.removeEventListener('resize', checkScreenSize)
+  }, [])
 
   const cargarLista = async () => {
     try {
@@ -118,6 +142,33 @@ export default function ListaPreciosPage({ params }: PageProps) {
     }
   }
 
+  const cargarMargenesPersonalizados = async () => {
+    if (!lista?.id) return
+
+    try {
+      const { data, error } = await supabase
+        .from('margenes_personalizados')
+        .select('producto_id, margen_porcentaje')
+        .eq('lista_precio_id', lista.id)
+
+      if (error) {
+        console.error('Error cargando márgenes personalizados:', error)
+        return
+      }
+
+      // Convertir array a objeto para fácil acceso
+      const margenesObj: {[productoId: string]: number} = {}
+      data?.forEach(item => {
+        margenesObj[item.producto_id] = item.margen_porcentaje
+      })
+
+      setMargenesPersonalizados(margenesObj)
+      console.log('Márgenes personalizados cargados:', margenesObj)
+    } catch (error) {
+      console.error('Error:', error)
+    }
+  }
+
   const filtrarProductos = () => {
     let filtrados = productos.filter(producto => {
       const coincideBusqueda = busqueda === '' || 
@@ -136,10 +187,15 @@ export default function ListaPreciosPage({ params }: PageProps) {
   }
 
   const calcularPrecioConGanancia = (producto: Producto): number => {
-    if (!lista || !producto.costo) return producto.precio || 0
-    const ganancia = (producto.costo * lista.porcentaje_ganancia) / 100
+    if (!producto.costo) return producto.precio || 0
+    
+    // Usar margen personalizado si existe, sino usar el margen de la lista
+    const margenPersonalizado = margenesPersonalizados[producto.id]
+    const margen = margenPersonalizado ?? (lista?.porcentaje_ganancia || 0)
+    const ganancia = (producto.costo * margen) / 100
     return producto.costo + ganancia
   }
+
 
   const actualizarCantidad = (productoId: string, cantidad: number) => {
     if (cantidad <= 0) {
@@ -265,7 +321,8 @@ export default function ListaPreciosPage({ params }: PageProps) {
           total_con_descuento: totalConDescuento,
           metodo_pago: metodoPago,
           mensaje_whatsapp: mensaje,
-          estado: 'pendiente'
+          estado: 'pendiente',
+          lista_precio_id: lista?.id || null
         })
 
       if (error) {
@@ -373,7 +430,7 @@ export default function ListaPreciosPage({ params }: PageProps) {
         zIndex: 3,
         maxWidth: '1400px',
         margin: '0 auto',
-        padding: '5rem 1rem 2rem 1rem',
+        padding: isMobile ? '5.5rem 1rem 2rem 1rem' : '5rem 1rem 2rem 1rem',
         minHeight: '100vh'
       }}>
         {/* Header */}
@@ -384,6 +441,98 @@ export default function ListaPreciosPage({ params }: PageProps) {
           transform: isVisible ? 'translateY(0)' : 'translateY(30px)',
           transition: 'all 1s ease-out'
         }}>
+          {/* Controles de ordenamiento y filtro - Solo en móvil */}
+          {isMobile && (
+            <div style={{
+              display: 'flex',
+              gap: '0.5rem',
+              marginBottom: '1.5rem',
+              marginTop: '0.5rem',
+              flexWrap: 'wrap',
+              justifyContent: 'center',
+              alignItems: 'center'
+            }}>
+              {/* Buscador */}
+              <input
+                type="text"
+                placeholder="Buscar productos..."
+                value={busqueda}
+                onChange={(e) => setBusqueda(e.target.value)}
+                style={{
+                  padding: '0.4rem 0.6rem',
+                  borderRadius: '6px',
+                  border: '1px solid #D1D5DB',
+                  fontSize: '0.8rem',
+                  background: '#FFFFFF',
+                  color: '#374151',
+                  minWidth: '150px',
+                  outline: 'none'
+                }}
+              />
+
+              {/* Filtro de categoría */}
+              <select
+                value={categoriaFiltro}
+                onChange={(e) => setCategoriaFiltro(e.target.value)}
+                style={{
+                  padding: '0.4rem 0.6rem',
+                  borderRadius: '6px',
+                  border: '1px solid #D1D5DB',
+                  fontSize: '0.8rem',
+                  background: '#FFFFFF',
+                  color: '#374151',
+                  minWidth: '120px',
+                  outline: 'none'
+                }}
+              >
+                <option value="">Todas las categorías</option>
+                {categorias.map(categoria => (
+                  <option key={categoria} value={categoria}>
+                    {categoria}
+                  </option>
+                ))}
+              </select>
+
+              {/* Ordenamiento */}
+              <select
+                onChange={(e) => {
+                  const orden = e.target.value
+                  if (orden === 'precio-asc') {
+                    setProductosFiltrados(prev => [...prev].sort((a, b) => (a.precio || 0) - (b.precio || 0)))
+                  } else if (orden === 'precio-desc') {
+                    setProductosFiltrados(prev => [...prev].sort((a, b) => (b.precio || 0) - (a.precio || 0)))
+                  } else if (orden === 'nombre-asc') {
+                    setProductosFiltrados(prev => [...prev].sort((a, b) => a.nombre.localeCompare(b.nombre)))
+                  } else {
+                    // Orden por defecto
+                    setProductosFiltrados(productos.filter(producto => {
+                      const cumpleBusqueda = busqueda === '' || 
+                        producto.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
+                        (producto.descripcion && producto.descripcion.toLowerCase().includes(busqueda.toLowerCase()))
+                      const cumpleCategoria = categoriaFiltro === '' || producto.categoria === categoriaFiltro
+                      return cumpleBusqueda && cumpleCategoria
+                    }))
+                  }
+                }}
+                style={{
+                  padding: '0.4rem 0.6rem',
+                  borderRadius: '6px',
+                  border: '1px solid #D1D5DB',
+                  fontSize: '0.8rem',
+                  background: '#FFFFFF',
+                  color: '#374151',
+                  minWidth: '120px',
+                  outline: 'none'
+                }}
+              >
+                <option value="">Ordenar por...</option>
+                <option value="nombre-asc">Nombre A-Z</option>
+                <option value="precio-asc">Precio: Menor a Mayor</option>
+                <option value="precio-desc">Precio: Mayor a Menor</option>
+              </select>
+            </div>
+          )}
+
           <h1 style={{
             fontSize: 'clamp(2.5rem, 6vw, 4rem)',
             fontWeight: '800',
@@ -420,7 +569,8 @@ export default function ListaPreciosPage({ params }: PageProps) {
           </div>
         </div>
 
-        {/* Filters */}
+        {/* Filters - Solo en desktop */}
+        {!isMobile && (
         <div style={{
           background: 'rgba(255, 255, 255, 0.1)',
           padding: '2rem',
@@ -606,6 +756,7 @@ export default function ListaPreciosPage({ params }: PageProps) {
             </button>
           </div>
         </div>
+        )}
 
         {/* Productos */}
         <div style={{
@@ -838,70 +989,70 @@ export default function ListaPreciosPage({ params }: PageProps) {
             )
           })}
         </div>
-
+          
         {productosFiltrados.length === 0 && (
-          <div style={{
-            textAlign: 'center',
-            padding: '4rem 2rem',
-            background: 'rgba(255, 255, 255, 0.1)',
-            backdropFilter: 'blur(10px)',
-            borderRadius: '20px',
-            border: '1px solid rgba(255, 255, 255, 0.2)',
-            boxShadow: '0 10px 30px rgba(0, 0, 0, 0.1)',
-            margin: '2rem 0'
-          }}>
             <div style={{
-              fontSize: '4rem',
-              marginBottom: '1rem'
+              textAlign: 'center',
+              padding: '4rem 2rem',
+              background: 'rgba(255, 255, 255, 0.1)',
+              backdropFilter: 'blur(10px)',
+              borderRadius: '20px',
+              border: '1px solid rgba(255, 255, 255, 0.2)',
+              boxShadow: '0 10px 30px rgba(0, 0, 0, 0.1)',
+              margin: '2rem 0'
             }}>
-              🔍
+              <div style={{
+                fontSize: '4rem',
+                marginBottom: '1rem'
+              }}>
+                🔍
+              </div>
+              <h3 style={{
+                fontSize: '1.5rem',
+                fontWeight: '700',
+                color: '#1F2937',
+                margin: '0 0 1rem 0'
+              }}>
+                No se encontraron productos
+              </h3>
+              <p style={{
+                fontSize: '1.1rem',
+                color: '#6B7280',
+                margin: '0 0 1.5rem 0',
+                lineHeight: '1.6'
+              }}>
+                Intenta ajustar los filtros de búsqueda o explorar otras categorías
+              </p>
+              <button
+                onClick={() => {
+                  setBusqueda('')
+                  setCategoriaFiltro('')
+                }}
+                style={{
+                  background: 'linear-gradient(135deg, #8B5CF6 0%, #4C1D95 100%)',
+                  color: 'white',
+                  border: 'none',
+                  padding: '0.75rem 1.5rem',
+                  borderRadius: '12px',
+                  fontSize: '1rem',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease',
+                  boxShadow: '0 4px 15px rgba(139, 92, 246, 0.4)'
+                }}
+                onMouseOver={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-2px) scale(1.02)'
+                  e.currentTarget.style.boxShadow = '0 6px 20px rgba(139, 92, 246, 0.6)'
+                }}
+                onMouseOut={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0) scale(1)'
+                  e.currentTarget.style.boxShadow = '0 4px 15px rgba(139, 92, 246, 0.4)'
+                }}
+              >
+                🔄 Limpiar Filtros
+              </button>
             </div>
-            <h3 style={{
-              fontSize: '1.5rem',
-              fontWeight: '700',
-              color: '#1F2937',
-              margin: '0 0 1rem 0'
-            }}>
-              No se encontraron productos
-            </h3>
-            <p style={{
-              fontSize: '1.1rem',
-              color: '#6B7280',
-              margin: '0 0 1.5rem 0',
-              lineHeight: '1.6'
-            }}>
-              Intenta ajustar los filtros de búsqueda o explorar otras categorías
-            </p>
-            <button
-              onClick={() => {
-                setBusqueda('')
-                setCategoriaFiltro('')
-              }}
-              style={{
-                background: 'linear-gradient(135deg, #8B5CF6 0%, #4C1D95 100%)',
-                color: 'white',
-                border: 'none',
-                padding: '0.75rem 1.5rem',
-                borderRadius: '12px',
-                fontSize: '1rem',
-                fontWeight: '600',
-                cursor: 'pointer',
-                transition: 'all 0.3s ease',
-                boxShadow: '0 4px 15px rgba(139, 92, 246, 0.4)'
-              }}
-              onMouseOver={(e) => {
-                e.currentTarget.style.transform = 'translateY(-2px) scale(1.02)'
-                e.currentTarget.style.boxShadow = '0 6px 20px rgba(139, 92, 246, 0.6)'
-              }}
-              onMouseOut={(e) => {
-                e.currentTarget.style.transform = 'translateY(0) scale(1)'
-                e.currentTarget.style.boxShadow = '0 4px 15px rgba(139, 92, 246, 0.4)'
-              }}
-            >
-              🔄 Limpiar Filtros
-            </button>
-          </div>
-        )}
+          )}
 
         {/* Footer con contacto */}
         <footer style={{

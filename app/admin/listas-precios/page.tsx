@@ -24,6 +24,13 @@ export default function ListasPreciosPage() {
   const [loading, setLoading] = useState(true)
   const [isVisible, setIsVisible] = useState(false)
   const [listas, setListas] = useState<ListaPrecios[]>([])
+  const [productos, setProductos] = useState<any[]>([])
+  const [mostrarTabla, setMostrarTabla] = useState(false)
+  const [margenesPorLista, setMargenesPorLista] = useState<{[listaId: string]: {[productoId: string]: number}}>({})
+  const [margenGlobalPorLista, setMargenGlobalPorLista] = useState<{[listaId: string]: number}>({})
+  const [listaSeleccionada, setListaSeleccionada] = useState<string>('')
+  const [archivoMargenesCSV, setArchivoMargenesCSV] = useState<File | null>(null)
+  const [productosModificados, setProductosModificados] = useState<Set<string>>(new Set())
   
   // Función de confirmación con toast
   const confirmDelete = (message: string, onConfirm: () => void) => {
@@ -102,6 +109,8 @@ export default function ListasPreciosPage() {
     if (isAuthenticated && !authLoading) {
       setIsVisible(true)
       cargarListas()
+      cargarProductos()
+      cargarMargenesPersonalizados()
     }
   }, [isAuthenticated, authLoading])
 
@@ -121,6 +130,347 @@ export default function ListasPreciosPage() {
     } catch (error) {
       console.error('Error:', error)
     }
+  }
+
+  const cargarProductos = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('productos')
+        .select('*')
+        .eq('publicado', true)
+        .order('nombre', { ascending: true })
+
+      if (error) {
+        console.error('Error cargando productos:', error)
+        return
+      }
+
+      setProductos(data || [])
+    } catch (error) {
+      console.error('Error:', error)
+    }
+  }
+
+  const cargarMargenesPersonalizados = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('margenes_personalizados')
+        .select('*')
+
+      if (error) {
+        console.error('Error cargando márgenes personalizados:', error)
+        return
+      }
+
+      // Organizar los márgenes por lista y producto
+      const margenesOrganizados: {[listaId: string]: {[productoId: string]: number}} = {}
+      data?.forEach(margen => {
+        if (!margenesOrganizados[margen.lista_precio_id]) {
+          margenesOrganizados[margen.lista_precio_id] = {}
+        }
+        margenesOrganizados[margen.lista_precio_id][margen.producto_id] = margen.margen_porcentaje
+      })
+
+      setMargenesPorLista(margenesOrganizados)
+    } catch (error) {
+      console.error('Error cargando márgenes personalizados:', error)
+    }
+  }
+
+  // Funciones para manejo de márgenes por lista
+  const calcularPrecioConGanancia = (producto: any, lista: ListaPrecios): number => {
+    if (!producto.costo) return producto.precio || 0
+    
+    // Usar margen personalizado de la lista si existe, sino usar margen global de la lista, sino usar el de la lista
+    const margenPersonalizado = margenesPorLista[lista.id]?.[producto.id]
+    const margenGlobal = margenGlobalPorLista[lista.id]
+    const margen = margenPersonalizado ?? (margenGlobal || lista?.porcentaje_ganancia || 0)
+    const ganancia = (producto.costo * margen) / 100
+    return producto.costo + ganancia
+  }
+
+  const aplicarMargenGlobal = (listaId: string) => {
+    const margenGlobal = margenGlobalPorLista[listaId] || 0
+    if (margenGlobal <= 0) {
+      toast.warn('Por favor ingresa un margen válido')
+      return
+    }
+    
+    const nuevosMargenes = { ...margenesPorLista }
+    if (!nuevosMargenes[listaId]) {
+      nuevosMargenes[listaId] = {}
+    }
+    
+    productos.forEach(producto => {
+      if (producto.costo) {
+        nuevosMargenes[listaId][producto.id] = margenGlobal
+      }
+    })
+    
+    setMargenesPorLista(nuevosMargenes)
+    toast.success(`Margen del ${margenGlobal}% aplicado a todos los productos de esta lista`)
+  }
+
+  const limpiarMargenes = async (listaId: string) => {
+    try {
+      // Eliminar márgenes personalizados de la base de datos
+      const { error } = await supabase
+        .from('margenes_personalizados')
+        .delete()
+        .eq('lista_precio_id', listaId)
+      
+      if (error) {
+        console.error('Error eliminando márgenes personalizados:', error)
+        toast.error('Error al eliminar los márgenes personalizados')
+        return
+      }
+
+      // Limpiar el estado local
+      const nuevosMargenes = { ...margenesPorLista }
+      delete nuevosMargenes[listaId]
+      setMargenesPorLista(nuevosMargenes)
+      
+      const nuevosMargenesGlobales = { ...margenGlobalPorLista }
+      delete nuevosMargenesGlobales[listaId]
+      setMargenGlobalPorLista(nuevosMargenesGlobales)
+      
+      toast.success('Márgenes personalizados eliminados para esta lista')
+    } catch (error) {
+      console.error('Error:', error)
+      toast.error('Error al eliminar los márgenes personalizados')
+    }
+  }
+
+  const actualizarMargenProducto = (listaId: string, productoId: string, margen: number) => {
+    const nuevosMargenes = { ...margenesPorLista }
+    if (!nuevosMargenes[listaId]) {
+      nuevosMargenes[listaId] = {}
+    }
+    nuevosMargenes[listaId][productoId] = margen
+    setMargenesPorLista(nuevosMargenes)
+    
+    // Marcar producto como modificado
+    setProductosModificados(prev => new Set([...prev, `${listaId}-${productoId}`]))
+  }
+
+  const guardarMargenIndividual = async (listaId: string, productoId: string) => {
+    try {
+      const margen = margenesPorLista[listaId]?.[productoId]
+      
+      if (margen && margen > 0) {
+        const { error } = await supabase
+          .from('margenes_personalizados')
+          .upsert({
+            lista_precio_id: listaId,
+            producto_id: productoId,
+            margen_porcentaje: margen
+          }, {
+            onConflict: 'lista_precio_id,producto_id'
+          })
+
+        if (error) {
+          console.error('Error guardando margen individual:', error)
+          toast.error('Error al guardar el margen')
+          return
+        }
+        
+        // Remover de productos modificados
+        setProductosModificados(prev => {
+          const nuevos = new Set(prev)
+          nuevos.delete(`${listaId}-${productoId}`)
+          return nuevos
+        })
+        
+        toast.success('Margen guardado correctamente')
+      } else {
+        // Eliminar margen si es 0 o negativo
+        const { error } = await supabase
+          .from('margenes_personalizados')
+          .delete()
+          .eq('lista_precio_id', listaId)
+          .eq('producto_id', productoId)
+
+        if (error) {
+          console.error('Error eliminando margen individual:', error)
+          toast.error('Error al eliminar el margen')
+          return
+        }
+        
+        // Remover de productos modificados
+        setProductosModificados(prev => {
+          const nuevos = new Set(prev)
+          nuevos.delete(`${listaId}-${productoId}`)
+          return nuevos
+        })
+        
+        toast.success('Margen eliminado correctamente')
+      }
+    } catch (error) {
+      console.error('Error:', error)
+      toast.error('Error al guardar el margen')
+    }
+  }
+
+  const guardarMargenesPersonalizados = async () => {
+    try {
+      let margenesGuardados = 0
+      let margenesEliminados = 0
+
+      // Procesar todos los márgenes de todas las listas
+      for (const listaId of Object.keys(margenesPorLista)) {
+        const margenesLista = margenesPorLista[listaId]
+        
+        for (const productoId of Object.keys(margenesLista)) {
+          const margen = margenesLista[productoId]
+          
+          if (margen > 0) {
+            const { error } = await supabase
+              .from('margenes_personalizados')
+              .upsert({
+                lista_precio_id: listaId,
+                producto_id: productoId,
+                margen_porcentaje: margen
+              })
+            
+            if (error) {
+              console.error('Error guardando margen personalizado:', error)
+              toast.error(`Error al guardar margen para producto ${productoId}`)
+              return
+            }
+            margenesGuardados++
+          } else {
+            // Si el margen es 0 o negativo, eliminar el registro
+            const { error } = await supabase
+              .from('margenes_personalizados')
+              .delete()
+              .eq('lista_precio_id', listaId)
+              .eq('producto_id', productoId)
+            
+            if (error) {
+              console.error('Error eliminando margen personalizado:', error)
+              toast.error(`Error al eliminar margen para producto ${productoId}`)
+              return
+            }
+            margenesEliminados++
+          }
+        }
+      }
+
+      if (margenesGuardados > 0 || margenesEliminados > 0) {
+        toast.success(`Márgenes guardados: ${margenesGuardados} guardados, ${margenesEliminados} eliminados`)
+        setProductosModificados(new Set()) // Limpiar productos modificados
+      } else {
+        toast.info('No hay cambios en los márgenes para guardar')
+      }
+    } catch (error) {
+      console.error('Error:', error)
+      toast.error('Error al guardar los márgenes personalizados')
+    }
+  }
+
+  const actualizarMargenGlobalLista = (listaId: string, margen: number) => {
+    const nuevosMargenesGlobales = { ...margenGlobalPorLista }
+    nuevosMargenesGlobales[listaId] = margen
+    setMargenGlobalPorLista(nuevosMargenesGlobales)
+  }
+
+  const manejarArchivoMargenesCSV = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    if (!listaSeleccionada) {
+      toast.warn('Por favor selecciona una lista primero')
+      return
+    }
+
+    if (!file.name.endsWith('.csv')) {
+      toast.error('Por favor selecciona un archivo CSV válido')
+      return
+    }
+
+    setArchivoMargenesCSV(file)
+    
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      try {
+        const csv = e.target?.result as string
+        const lineas = csv.split('\n').filter(linea => linea.trim())
+        
+        if (lineas.length < 2) {
+          toast.error('El archivo CSV debe tener al menos una fila de encabezados y una fila de datos')
+          return
+        }
+
+        // Asumir formato: nombre_producto,margen_porcentaje
+        const encabezados = lineas[0].split(',').map(h => h.trim().toLowerCase())
+        const indiceNombre = encabezados.findIndex(h => h.includes('nombre') || h.includes('producto'))
+        const indiceMargen = encabezados.findIndex(h => h.includes('margen') || h.includes('ganancia') || h.includes('porcentaje'))
+
+        if (indiceNombre === -1 || indiceMargen === -1) {
+          toast.error('El CSV debe tener columnas de "nombre" y "margen" (o "ganancia", "porcentaje")')
+          return
+        }
+
+        const nuevosMargenes = { ...margenesPorLista }
+        if (!nuevosMargenes[listaSeleccionada]) {
+          nuevosMargenes[listaSeleccionada] = {}
+        }
+        
+        let productosEncontrados = 0
+
+        for (let i = 1; i < lineas.length; i++) {
+          const columnas = lineas[i].split(',').map(c => c.trim())
+          const nombreProducto = columnas[indiceNombre]
+          const margenStr = columnas[indiceMargen]
+
+          if (!nombreProducto || !margenStr) continue
+
+          const margen = parseFloat(margenStr)
+          if (isNaN(margen)) continue
+
+          // Buscar el producto por nombre
+          const producto = productos.find(p => 
+            p.nombre.toLowerCase().includes(nombreProducto.toLowerCase()) ||
+            nombreProducto.toLowerCase().includes(p.nombre.toLowerCase())
+          )
+
+          if (producto) {
+            nuevosMargenes[listaSeleccionada][producto.id] = margen
+            productosEncontrados++
+          }
+        }
+
+        if (productosEncontrados === 0) {
+          toast.warn('No se encontraron productos que coincidan con los nombres del CSV')
+          return
+        }
+
+        setMargenesPorLista(nuevosMargenes)
+        toast.success(`Márgenes aplicados a ${productosEncontrados} productos de la lista seleccionada`)
+        
+      } catch (error) {
+        console.error('Error procesando CSV:', error)
+        toast.error('Error al procesar el archivo CSV')
+      }
+    }
+    
+    reader.readAsText(file)
+  }
+
+  const descargarCSVTemplateMargenes = () => {
+    const encabezados = ['nombre_producto', 'margen_porcentaje']
+    const datos = productos.map(p => [p.nombre, '0'])
+    const csv = [encabezados, ...datos].map(fila => fila.join(',')).join('\n')
+    
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `margenes_productos.csv`
+    a.click()
+    window.URL.revokeObjectURL(url)
+    
+    toast.success('Template CSV descargado')
   }
 
   const generarURLPersonalizada = async (nombre: string) => {
@@ -345,6 +695,264 @@ export default function ListasPreciosPage() {
             >
               ➕ Nueva Lista
             </button>
+
+            <button
+              onClick={() => setMostrarTabla(!mostrarTabla)}
+              style={{
+                background: 'linear-gradient(135deg, #8B5CF6 0%, #4C1D95 100%)',
+                color: 'white',
+                border: 'none',
+                padding: '0.75rem 1.5rem',
+                borderRadius: '12px',
+                fontSize: '1rem',
+                fontWeight: '600',
+                cursor: 'pointer',
+                transition: 'all 0.3s ease',
+                boxShadow: '0 4px 15px rgba(139, 92, 246, 0.4)'
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)'
+                e.currentTarget.style.boxShadow = '0 6px 20px rgba(139, 92, 246, 0.6)'
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)'
+                e.currentTarget.style.boxShadow = '0 4px 15px rgba(139, 92, 246, 0.4)'
+              }}
+            >
+              {mostrarTabla ? 'Ver Listas' : '📊 Ver margenes'}
+            </button>
+          </div>
+
+          {/* Controles de Margen */}
+          <div style={{
+            background: '#F8F9FA',
+            padding: '1.5rem',
+            borderRadius: '12px',
+            border: '1px solid #E5E7EB',
+            marginBottom: '2rem'
+          }}>
+            <h3 style={{
+              fontSize: '1.125rem',
+              fontWeight: '600',
+              color: '#111827',
+              marginBottom: '1rem'
+            }}>
+              💰 Control de Márgenes por Lista de Precios
+            </h3>
+
+            {/* Selector de Lista */}
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label style={{
+                display: 'block',
+                fontSize: '0.875rem',
+                fontWeight: '500',
+                color: '#374151',
+                marginBottom: '0.5rem'
+              }}>
+                Seleccionar Lista de Precios
+              </label>
+              <select
+                value={listaSeleccionada}
+                onChange={(e) => setListaSeleccionada(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  borderRadius: '6px',
+                  border: '1px solid #D1D5DB',
+                  background: '#FFFFFF',
+                  color: '#111827',
+                  fontSize: '0.875rem',
+                  outline: 'none'
+                }}
+              >
+                <option value="">Selecciona una lista...</option>
+                {listas.map(lista => (
+                  <option key={lista.id} value={lista.id}>
+                    {lista.nombre} (Margen base: {lista.porcentaje_ganancia}%)
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {listaSeleccionada && (
+              <>
+                <div style={{
+                  background: '#EFF6FF',
+                  padding: '1rem',
+                  borderRadius: '8px',
+                  marginBottom: '1rem',
+                  border: '1px solid #BFDBFE'
+                }}>
+                  <p style={{
+                    margin: 0,
+                    fontSize: '0.875rem',
+                    color: '#1E40AF',
+                    fontWeight: '500'
+                  }}>
+                    📋 Configurando márgenes para: <strong>{listas.find(l => l.id === listaSeleccionada)?.nombre}</strong>
+                  </p>
+                </div>
+            
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+                  gap: '1rem',
+                  marginBottom: '1rem'
+                }}>
+                  {/* Margen Global para la Lista */}
+                  <div>
+                    <label style={{
+                      display: 'block',
+                      fontSize: '0.875rem',
+                      fontWeight: '500',
+                      color: '#374151',
+                      marginBottom: '0.5rem'
+                    }}>
+                      Margen Global para esta Lista (%)
+                    </label>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <input
+                        type="number"
+                        placeholder="Ej: 50"
+                        value={margenGlobalPorLista[listaSeleccionada] || ''}
+                        onChange={(e) => actualizarMargenGlobalLista(listaSeleccionada, parseFloat(e.target.value) || 0)}
+                        style={{
+                          flex: 1,
+                          padding: '0.5rem 0.75rem',
+                          borderRadius: '6px',
+                          border: '1px solid #D1D5DB',
+                          background: '#FFFFFF',
+                          color: '#111827',
+                          fontSize: '0.875rem',
+                          outline: 'none'
+                        }}
+                      />
+                      <button
+                        onClick={() => aplicarMargenGlobal(listaSeleccionada)}
+                        style={{
+                          background: '#8B5CF6',
+                          color: 'white',
+                          border: 'none',
+                          padding: '0.5rem 1rem',
+                          borderRadius: '6px',
+                          fontSize: '0.875rem',
+                          fontWeight: '500',
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        Aplicar
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Cargar CSV de Márgenes */}
+                  <div>
+                    <label style={{
+                      display: 'block',
+                      fontSize: '0.875rem',
+                      fontWeight: '500',
+                      color: '#374151',
+                      marginBottom: '0.5rem'
+                    }}>
+                      Cargar Márgenes desde CSV
+                    </label>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <input
+                        type="file"
+                        accept=".csv"
+                        onChange={manejarArchivoMargenesCSV}
+                        style={{
+                          flex: 1,
+                          padding: '0.5rem 0.75rem',
+                          borderRadius: '6px',
+                          border: '1px solid #D1D5DB',
+                          background: '#FFFFFF',
+                          color: '#111827',
+                          fontSize: '0.875rem',
+                          outline: 'none'
+                        }}
+                      />
+                      <button
+                        onClick={descargarCSVTemplateMargenes}
+                        style={{
+                          background: '#10B981',
+                          color: 'white',
+                          border: 'none',
+                          padding: '0.5rem 1rem',
+                          borderRadius: '6px',
+                          fontSize: '0.875rem',
+                          fontWeight: '500',
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        Template
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Botones de Acción */}
+                <div style={{
+                  display: 'flex',
+                  gap: '1rem',
+                  justifyContent: 'center',
+                  flexWrap: 'wrap'
+                }}>
+                  <button
+                    onClick={guardarMargenesPersonalizados}
+                    style={{
+                      background: '#10B981',
+                      color: 'white',
+                      border: 'none',
+                      padding: '0.75rem 1.5rem',
+                      borderRadius: '8px',
+                      fontSize: '0.875rem',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      transition: 'all 0.3s ease',
+                      boxShadow: '0 4px 15px rgba(16, 185, 129, 0.3)'
+                    }}
+                    onMouseOver={(e) => {
+                      e.currentTarget.style.transform = 'translateY(-2px)'
+                      e.currentTarget.style.boxShadow = '0 6px 20px rgba(16, 185, 129, 0.4)'
+                    }}
+                    onMouseOut={(e) => {
+                      e.currentTarget.style.transform = 'translateY(0)'
+                      e.currentTarget.style.boxShadow = '0 4px 15px rgba(16, 185, 129, 0.3)'
+                    }}
+                  >
+                    💾 Guardar Márgenes
+                  </button>
+                  <button
+                    onClick={() => limpiarMargenes(listaSeleccionada)}
+                    style={{
+                      background: '#EF4444',
+                      color: 'white',
+                      border: 'none',
+                      padding: '0.75rem 1.5rem',
+                      borderRadius: '8px',
+                      fontSize: '0.875rem',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      transition: 'all 0.3s ease',
+                      boxShadow: '0 4px 15px rgba(239, 68, 68, 0.3)'
+                    }}
+                    onMouseOver={(e) => {
+                      e.currentTarget.style.transform = 'translateY(-2px)'
+                      e.currentTarget.style.boxShadow = '0 6px 20px rgba(239, 68, 68, 0.4)'
+                    }}
+                    onMouseOut={(e) => {
+                      e.currentTarget.style.transform = 'translateY(0)'
+                      e.currentTarget.style.boxShadow = '0 4px 15px rgba(239, 68, 68, 0.3)'
+                    }}
+                  >
+                    🗑️ Limpiar Márgenes de esta Lista
+                  </button>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Formulario */}
@@ -559,11 +1167,216 @@ export default function ListasPreciosPage() {
           )}
 
           {/* Lista de listas */}
-          <div style={{
-            display: 'grid',
-            gap: '1rem'
-          }}>
-            {listas.map((lista) => (
+          {mostrarTabla ? (
+            /* Vista de Tabla */
+            <div style={{
+              background: '#FFFFFF',
+              borderRadius: '12px',
+              border: '1px solid #E5E7EB',
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)',
+              marginTop: '2rem',
+              overflow: 'hidden'
+            }}>
+              <div style={{
+                background: '#F8F9FA',
+                padding: '1rem',
+                borderBottom: '1px solid #E5E7EB'
+              }}>
+                <h3 style={{
+                  fontSize: '1.125rem',
+                  fontWeight: '600',
+                  color: '#111827',
+                  margin: 0
+                }}>
+                  📊 Gestión de Productos - Vista Tabla
+                </h3>
+              </div>
+              
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{
+                  width: '100%',
+                  borderCollapse: 'collapse'
+                }}>
+                  <thead>
+                    <tr style={{
+                      background: '#F3F4F6',
+                      borderBottom: '2px solid #E5E7EB'
+                    }}>
+                      <th style={{ padding: '1rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Producto</th>
+                      <th style={{ padding: '1rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Categoría</th>
+                      <th style={{ padding: '1rem', textAlign: 'right', fontWeight: '600', color: '#374151' }}>Costo</th>
+                      <th style={{ padding: '1rem', textAlign: 'right', fontWeight: '600', color: '#374151' }}>Margen (%)</th>
+                      <th style={{ padding: '1rem', textAlign: 'right', fontWeight: '600', color: '#374151' }}>Precio Final</th>
+                      <th style={{ padding: '1rem', textAlign: 'center', fontWeight: '600', color: '#374151' }}>Lista</th>
+                      <th style={{ padding: '1rem', textAlign: 'center', fontWeight: '600', color: '#374151' }}>Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {productos.map((producto, index) => {
+                      // Calcular precio para cada lista
+                      const preciosPorLista = listas.map(lista => {
+                        const margenPersonalizado = margenesPorLista[lista.id]?.[producto.id]
+                        const margenGlobal = margenGlobalPorLista[lista.id]
+                        const margen = margenPersonalizado ?? (margenGlobal || lista?.porcentaje_ganancia || 0)
+                        
+                        return {
+                          lista: lista,
+                          precio: calcularPrecioConGanancia(producto, lista),
+                          margen: margen
+                        }
+                      })
+                      
+                      return (
+                        <tr key={producto.id} style={{
+                          borderBottom: '1px solid #E5E7EB',
+                          background: index % 2 === 0 ? '#FFFFFF' : '#F9FAFB'
+                        }}>
+                          <td style={{ padding: '1rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                              {producto.foto_url && (
+                                <img
+                                  src={producto.foto_url}
+                                  alt={producto.nombre}
+                                  style={{
+                                    width: '40px',
+                                    height: '40px',
+                                    borderRadius: '8px',
+                                    objectFit: 'cover'
+                                  }}
+                                />
+                              )}
+                              <div>
+                                <div style={{ fontWeight: '600', color: '#111827', marginBottom: '0.25rem' }}>
+                                  {producto.nombre}
+                                </div>
+                                {producto.descripcion && (
+                                  <div style={{ fontSize: '0.875rem', color: '#6B7280' }}>
+                                    {producto.descripcion.length > 50 
+                                      ? `${producto.descripcion.substring(0, 50)}...` 
+                                      : producto.descripcion
+                                    }
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                          <td style={{ padding: '1rem', color: '#6B7280' }}>
+                            {producto.categoria || 'Sin categoría'}
+                          </td>
+                          <td style={{ padding: '1rem', textAlign: 'right', color: '#6B7280' }}>
+                            ${producto.costo?.toFixed(2) || 'N/A'}
+                          </td>
+                          <td style={{ padding: '1rem', textAlign: 'right' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                              {preciosPorLista.map(({ lista, margen }) => (
+                                <div key={lista.id} style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', justifyContent: 'flex-end' }}>
+                                  <span style={{ fontSize: '0.75rem', color: '#6B7280', minWidth: '60px' }}>
+                                    {lista.nombre}:
+                                  </span>
+                                  <input
+                                    type="number"
+                                    value={margenesPorLista[lista.id]?.[producto.id] ?? (margenGlobalPorLista[lista.id] || lista.porcentaje_ganancia || 0)}
+                                    onChange={(e) => {
+                                      const nuevoMargen = parseFloat(e.target.value) || 0
+                                      actualizarMargenProducto(lista.id, producto.id, nuevoMargen)
+                                    }}
+                                    style={{
+                                      width: '60px',
+                                      padding: '0.2rem 0.3rem',
+                                      borderRadius: '3px',
+                                      border: '1px solid #D1D5DB',
+                                      fontSize: '0.75rem',
+                                      textAlign: 'right'
+                                    }}
+                                  />
+                                  <span style={{ color: '#6B7280', fontSize: '0.75rem' }}>%</span>
+                                </div>
+                              ))}
+                            </div>
+                          </td>
+                          <td style={{ padding: '1rem', textAlign: 'right', fontWeight: '600', color: '#10B981' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                              {preciosPorLista.map(({ lista, precio }) => (
+                                <div key={lista.id} style={{ fontSize: '0.875rem' }}>
+                                  {lista.nombre}: ${precio.toFixed(2)}
+                                </div>
+                              ))}
+                            </div>
+                          </td>
+                          <td style={{ padding: '1rem', textAlign: 'center' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                              {listas.map(lista => (
+                                <Link
+                                  key={lista.id}
+                                  href={`/lista-precios/${lista.url_personalizada}`}
+                                  target="_blank"
+                                  style={{
+                                    background: '#3B82F6',
+                                    color: 'white',
+                                    textDecoration: 'none',
+                                    padding: '0.25rem 0.5rem',
+                                    borderRadius: '4px',
+                                    fontSize: '0.75rem',
+                                    fontWeight: '500',
+                                    textAlign: 'center'
+                                  }}
+                                >
+                                  Ver {lista.nombre}
+                                </Link>
+                              ))}
+                            </div>
+                          </td>
+                          <td style={{ padding: '1rem', textAlign: 'center' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                              {listas.map(lista => {
+                                const hasChanges = productosModificados.has(`${lista.id}-${producto.id}`)
+                                return (
+                                  <button
+                                    key={lista.id}
+                                    onClick={() => guardarMargenIndividual(lista.id, producto.id)}
+                                    disabled={!hasChanges}
+                                    style={{
+                                      background: hasChanges ? '#10B981' : '#E5E7EB',
+                                      color: hasChanges ? 'white' : '#9CA3AF',
+                                      border: 'none',
+                                      padding: '0.25rem 0.5rem',
+                                      borderRadius: '4px',
+                                      fontSize: '0.75rem',
+                                      fontWeight: '500',
+                                      cursor: hasChanges ? 'pointer' : 'not-allowed',
+                                      transition: 'all 0.2s ease'
+                                    }}
+                                    onMouseOver={(e) => {
+                                      if (hasChanges) {
+                                        e.currentTarget.style.background = '#059669'
+                                      }
+                                    }}
+                                    onMouseOut={(e) => {
+                                      if (hasChanges) {
+                                        e.currentTarget.style.background = '#10B981'
+                                      }
+                                    }}
+                                  >
+                                    💾 Guardar
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            /* Vista de Lista Original */
+            <div style={{
+              display: 'grid',
+              gap: '1rem'
+            }}>
+              {listas.map((lista) => (
               <div key={lista.id} style={{
                 background: '#F9FAFB',
                 borderRadius: '12px',
@@ -693,8 +1506,11 @@ export default function ListasPreciosPage() {
                 </div>
               </div>
             ))}
+            </div>
+          )}
 
-            {listas.length === 0 && (
+          {/* Mensaje cuando no hay listas */}
+          {listas.length === 0 && (
               <div style={{
                 textAlign: 'center',
                 padding: '3rem',
@@ -708,7 +1524,6 @@ export default function ListasPreciosPage() {
                 </p>
               </div>
             )}
-          </div>
         </div>
       </div>
     </div>

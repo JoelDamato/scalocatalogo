@@ -18,6 +18,7 @@ interface Producto {
   categoria: string | null
   precio: number | null
   costo: number | null
+  porcentaje_ganancia: number | null
   foto_url: string | null
   publicado: boolean
   created_at: string
@@ -45,6 +46,12 @@ export default function AdminPage() {
   const [cargandoCSV, setCargandoCSV] = useState(false)
   const [productoEditando, setProductoEditando] = useState<Producto | null>(null)
   const [isVisible, setIsVisible] = useState(false)
+  // Siempre mostrar vista de tabla
+  const [margenesPersonalizados, setMargenesPersonalizados] = useState<{[key: string]: number}>({})
+  const [margenGlobal, setMargenGlobal] = useState<number>(0)
+  const [productosModificados, setProductosModificados] = useState<Set<string>>(new Set())
+  const [costosModificados, setCostosModificados] = useState<Set<string>>(new Set())
+  const [mostrarEdicionMasiva, setMostrarEdicionMasiva] = useState(false)
   const [formData, setFormData] = useState({
     nombre: '',
     descripcion: '',
@@ -59,13 +66,27 @@ export default function AdminPage() {
   const [subiendoImagen, setSubiendoImagen] = useState(false)
   const [busquedaAdmin, setBusquedaAdmin] = useState('')
   const [productosFiltrados, setProductosFiltrados] = useState<Producto[]>([])
+  const [isMobile, setIsMobile] = useState(true) // Inicializar como true para evitar flash
+
+  // Detectar tamaño de pantalla
+  useEffect(() => {
+    const checkScreenSize = () => {
+      setIsMobile(window.innerWidth <= 768)
+    }
+    
+    checkScreenSize()
+    window.addEventListener('resize', checkScreenSize)
+    
+    return () => window.removeEventListener('resize', checkScreenSize)
+  }, [])
 
   // Efecto para recalcular precio cuando cambian costo/porcentaje y está en modo automático
   useEffect(() => {
     console.log('useEffect ejecutado:', { 
       calcularPrecioAutomatico, 
       costo: formData.costo, 
-      porcentaje: formData.porcentaje_ganancia 
+      porcentaje: formData.porcentaje_ganancia,
+      productoEditando: productoEditando?.id
     })
     
     if (calcularPrecioAutomatico && formData.costo && formData.porcentaje_ganancia) {
@@ -82,7 +103,7 @@ export default function AdminPage() {
         }
       }
     }
-  }, [formData.costo, formData.porcentaje_ganancia, calcularPrecioAutomatico])
+  }, [formData.costo, formData.porcentaje_ganancia, calcularPrecioAutomatico, productoEditando])
 
   // Efecto para filtrar productos
   useEffect(() => {
@@ -140,7 +161,8 @@ export default function AdminPage() {
     await Promise.all([
       cargarProductos(),
       cargarProductosPopulares(),
-      cargarProductosFacturados()
+      cargarProductosFacturados(),
+      cargarMargenesPersonalizados()
     ])
     setLoading(false)
   }
@@ -160,6 +182,47 @@ export default function AdminPage() {
       setProductos(data || [])
     } catch (error) {
       console.error('Error:', error)
+    }
+  }
+
+  const cargarMargenesPersonalizados = async () => {
+    try {
+      // Cargar márgenes desde la tabla productos
+      const { data: productosData, error: productosError } = await supabase
+        .from('productos')
+        .select('id, porcentaje_ganancia')
+
+      if (productosError) {
+        console.error('Error cargando márgenes de productos:', productosError)
+        return
+      }
+
+      // Organizar los márgenes por producto desde la tabla productos
+      const margenesOrganizados: {[productoId: string]: number} = {}
+      productosData?.forEach(producto => {
+        if (producto.porcentaje_ganancia !== null && producto.porcentaje_ganancia !== undefined) {
+          margenesOrganizados[producto.id] = producto.porcentaje_ganancia
+        }
+      })
+
+      console.log('Márgenes cargados desde BD:', {
+        productosData,
+        margenesOrganizados,
+        totalProductos: productosData?.length,
+        totalMargenes: Object.keys(margenesOrganizados).length
+      })
+      
+      setMargenesPersonalizados(margenesOrganizados)
+      
+      // También actualizar la lista de productos con los márgenes cargados
+      setProductos(prev => prev.map(producto => {
+        const margenCargado = margenesOrganizados[producto.id]
+        return margenCargado !== undefined 
+          ? { ...producto, porcentaje_ganancia: margenCargado }
+          : producto
+      }))
+    } catch (error) {
+      console.error('Error cargando márgenes personalizados:', error)
     }
   }
 
@@ -260,6 +323,370 @@ export default function AdminPage() {
     }
   }
 
+  // Funciones para manejo de márgenes
+  const calcularPrecioConGanancia = (producto: Producto): number => {
+    if (!producto.costo) return producto.precio || 0
+    
+    // Usar margen personalizado si existe, sino usar el del producto, sino usar margen global, sino usar el del formulario
+    const margen = margenesPersonalizados[producto.id] ?? 
+                   (producto.porcentaje_ganancia || margenGlobal || parseFloat(formData.porcentaje_ganancia) || 50)
+    const ganancia = (producto.costo * margen) / 100
+    return producto.costo + ganancia
+  }
+
+  const aplicarMargenGlobal = async () => {
+    if (margenGlobal <= 0) {
+      toast.warn('Por favor ingresa un margen válido')
+      return
+    }
+    
+    try {
+      // Actualizar todos los productos con el margen global
+      const { error } = await supabase
+        .from('productos')
+        .update({ porcentaje_ganancia: margenGlobal })
+        .neq('id', '00000000-0000-0000-0000-000000000000') // Actualizar todos
+
+      if (error) {
+        console.error('Error aplicando margen global:', error)
+        toast.error('Error al aplicar el margen global')
+        return
+      }
+
+      // Actualizar el estado local
+      const nuevosMargenes: {[key: string]: number} = {}
+      productos.forEach(producto => {
+        nuevosMargenes[producto.id] = margenGlobal
+      })
+      
+      setMargenesPersonalizados(nuevosMargenes)
+      setProductos(prev => prev.map(producto => ({
+        ...producto,
+        porcentaje_ganancia: margenGlobal
+      })))
+      
+      toast.success(`Margen del ${margenGlobal}% aplicado a todos los productos`)
+    } catch (error) {
+      console.error('Error:', error)
+      toast.error('Error al aplicar el margen global')
+    }
+  }
+
+  const actualizarMargenProducto = (productoId: string, nuevoMargen: number) => {
+    setMargenesPersonalizados(prev => ({
+      ...prev,
+      [productoId]: nuevoMargen
+    }))
+    
+    // Marcar el producto como modificado
+    setProductosModificados(prev => new Set([...prev, productoId]))
+  }
+
+  const actualizarCostoProducto = (productoId: string, nuevoCosto: number) => {
+    setProductos(prev => prev.map(producto => 
+      producto.id === productoId 
+        ? { ...producto, costo: nuevoCosto }
+        : producto
+    ))
+    
+    // Marcar el producto como modificado para costo
+    setCostosModificados(prev => new Set([...prev, productoId]))
+  }
+
+  const guardarProductoCompleto = async (productoId: string) => {
+    try {
+      const producto = productos.find(p => p.id === productoId)
+      if (!producto) {
+        toast.warn('Producto no encontrado')
+        return
+      }
+
+      console.log('Guardando producto completo:', productoId, 'costo:', producto.costo, 'margen:', margenesPersonalizados[productoId])
+
+      // Actualizar tanto el costo como el margen en la tabla productos
+      const updateData: any = {}
+      
+      if (costosModificados.has(productoId)) {
+        updateData.costo = producto.costo
+      }
+      
+      if (productosModificados.has(productoId)) {
+        updateData.porcentaje_ganancia = margenesPersonalizados[productoId]
+      }
+
+      if (Object.keys(updateData).length > 0) {
+        const { error: errorProducto } = await supabase
+          .from('productos')
+          .update(updateData)
+          .eq('id', productoId)
+
+        if (errorProducto) {
+          console.error('Error actualizando producto:', errorProducto)
+          toast.error(`Error al guardar el producto: ${errorProducto.message}`)
+          return
+        }
+
+        console.log('Producto actualizado en tabla productos')
+      }
+
+      // Si hay margen personalizado, también actualizar en margenes_personalizados
+      if (productosModificados.has(productoId) && margenesPersonalizados[productoId]) {
+        const { data: listas, error: errorListas } = await supabase
+          .from('listas_precios')
+          .select('id')
+          .limit(1)
+
+        if (!errorListas && listas && listas.length > 0) {
+          const listaId = listas[0].id
+          const margen = margenesPersonalizados[productoId]
+
+          const { error: errorMargen } = await supabase
+            .from('margenes_personalizados')
+            .upsert({
+              lista_precio_id: listaId,
+              producto_id: productoId,
+              margen_porcentaje: margen
+            }, {
+              onConflict: 'lista_precio_id,producto_id'
+            })
+
+          if (errorMargen) {
+            console.error('Error actualizando margen personalizado:', errorMargen)
+            // No retornamos aquí porque el margen principal ya se guardó
+          }
+        }
+      }
+
+      // Remover el producto de las listas de modificados
+      setCostosModificados(prev => {
+        const nuevos = new Set(prev)
+        nuevos.delete(productoId)
+        return nuevos
+      })
+      
+      setProductosModificados(prev => {
+        const nuevos = new Set(prev)
+        nuevos.delete(productoId)
+        return nuevos
+      })
+
+      toast.success('Producto guardado correctamente')
+    } catch (error) {
+      console.error('Error:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
+      toast.error(`Error al guardar el producto: ${errorMessage}`)
+    }
+  }
+
+  const guardarProductoIndividual = async (productoId: string) => {
+    try {
+      const margen = margenesPersonalizados[productoId]
+      if (margen === undefined) {
+        toast.warn('No hay margen para guardar')
+          return
+        }
+
+      console.log('Guardando margen para producto:', productoId, 'margen:', margen)
+
+      // Actualizar el margen en la tabla productos
+      const { error: errorProducto } = await supabase
+        .from('productos')
+        .update({ porcentaje_ganancia: margen })
+        .eq('id', productoId)
+
+      if (errorProducto) {
+        console.error('Error actualizando margen del producto:', errorProducto)
+        toast.error(`Error al guardar el margen del producto: ${errorProducto.message}`)
+        return
+      }
+
+      console.log('Margen actualizado en tabla productos')
+
+      // Obtener la primera lista de precios para actualizar margenes_personalizados
+      const { data: listas, error: errorListas } = await supabase
+        .from('listas_precios')
+        .select('id')
+        .limit(1)
+      
+      if (!errorListas && listas && listas.length > 0) {
+        const listaId = listas[0].id
+        console.log('Lista de precios encontrada:', listaId)
+
+        // Actualizar o insertar en margenes_personalizados
+        const { error: errorMargen } = await supabase
+          .from('margenes_personalizados')
+          .upsert({
+            lista_precio_id: listaId,
+            producto_id: productoId,
+            margen_porcentaje: margen
+          })
+
+        if (errorMargen) {
+          console.error('Error actualizando margen personalizado:', errorMargen)
+          // No retornamos aquí porque el margen principal ya se guardó
+        } else {
+          console.log('Margen actualizado en margenes_personalizados')
+        }
+      } else {
+        console.warn('No se encontraron listas de precios')
+      }
+
+      // Actualizar la lista de productos con el nuevo margen
+      setProductos(prev => prev.map(producto => 
+        producto.id === productoId 
+          ? { ...producto, porcentaje_ganancia: margen }
+          : producto
+      ))
+
+      // Actualizar también el estado de márgenes personalizados para mantener sincronización
+      setMargenesPersonalizados(prev => ({
+        ...prev,
+        [productoId]: margen
+      }))
+
+      console.log('Estado actualizado:', {
+        productoId,
+        margen,
+        margenesPersonalizadosActualizados: { ...margenesPersonalizados, [productoId]: margen }
+      })
+
+      // Remover el producto de la lista de modificados
+      setProductosModificados(prev => {
+        const nuevos = new Set(prev)
+        nuevos.delete(productoId)
+        return nuevos
+      })
+
+      toast.success('Margen guardado correctamente')
+    } catch (error) {
+      console.error('Error:', error)
+      const errorMessage = error instanceof Error ? error.message : 'Error desconocido'
+      toast.error(`Error al guardar el margen del producto: ${errorMessage}`)
+    }
+  }
+
+  const guardarMargenesPersonalizados = async () => {
+    try {
+      let margenesGuardados = 0
+      let margenesEliminados = 0
+
+      // Obtener la primera lista de precios disponible
+      const { data: listas, error: errorListas } = await supabase
+        .from('listas_precios')
+        .select('id')
+        .limit(1)
+      
+      if (errorListas || !listas || listas.length === 0) {
+        console.error('Error obteniendo lista de precios:', errorListas)
+        toast.error('No hay listas de precios disponibles')
+          return
+        }
+
+      const listaId = listas[0].id
+
+      // Procesar todos los márgenes personalizados
+      for (const productoId of Object.keys(margenesPersonalizados)) {
+        const margen = margenesPersonalizados[productoId]
+        
+        // Actualizar el margen en la tabla productos
+        const { error: errorProducto } = await supabase
+          .from('productos')
+          .update({ porcentaje_ganancia: margen })
+          .eq('id', productoId)
+        
+        if (errorProducto) {
+          console.error('Error actualizando margen del producto:', errorProducto)
+          toast.error(`Error al actualizar margen del producto ${productoId}`)
+          return
+        }
+        
+        if (margen > 0) {
+          const { error } = await supabase
+            .from('margenes_personalizados')
+            .upsert({
+              lista_precio_id: listaId,
+              producto_id: productoId,
+              margen_porcentaje: margen
+            }, {
+              onConflict: 'lista_precio_id,producto_id'
+            })
+          
+          if (error) {
+            console.error('Error guardando margen personalizado:', error)
+            toast.error(`Error al guardar margen para producto ${productoId}`)
+          return
+        }
+          margenesGuardados++
+        } else {
+          // Si el margen es 0 o negativo, eliminar el registro
+          const { error } = await supabase
+            .from('margenes_personalizados')
+            .delete()
+            .eq('lista_precio_id', listaId)
+            .eq('producto_id', productoId)
+          
+          if (error) {
+            console.error('Error eliminando margen personalizado:', error)
+            toast.error(`Error al eliminar margen para producto ${productoId}`)
+            return
+          }
+          margenesEliminados++
+        }
+      }
+
+      if (margenesGuardados > 0 || margenesEliminados > 0) {
+        // Actualizar la lista de productos con los nuevos márgenes
+        setProductos(prev => prev.map(producto => {
+          const margenActualizado = margenesPersonalizados[producto.id]
+          return margenActualizado !== undefined 
+            ? { ...producto, porcentaje_ganancia: margenActualizado }
+            : producto
+        }))
+
+        // Limpiar la lista de productos modificados
+        setProductosModificados(new Set())
+        toast.success(`Márgenes guardados: ${margenesGuardados} guardados, ${margenesEliminados} eliminados`)
+      } else {
+        toast.info('No hay cambios en los márgenes para guardar')
+      }
+      } catch (error) {
+      console.error('Error:', error)
+      toast.error('Error al guardar los márgenes personalizados')
+    }
+  }
+
+  const limpiarMargenes = async () => {
+    try {
+      // Resetear todos los productos al margen por defecto (50%)
+      const { error } = await supabase
+        .from('productos')
+        .update({ porcentaje_ganancia: 50 })
+        .neq('id', '00000000-0000-0000-0000-000000000000') // Actualizar todos
+      
+      if (error) {
+        console.error('Error reseteando márgenes:', error)
+        toast.error('Error al resetear los márgenes')
+        return
+      }
+
+      // Limpiar el estado local
+      setMargenesPersonalizados({})
+      setProductosModificados(new Set())
+      setMargenGlobal(0)
+      
+      // Recargar productos para obtener los datos actualizados
+      await cargarProductos()
+      await cargarMargenesPersonalizados()
+      
+      toast.success('Márgenes reseteados al valor por defecto (50%)')
+    } catch (error) {
+      console.error('Error:', error)
+      toast.error('Error al resetear los márgenes')
+    }
+  }
+
+
+
   const subirImagen = async (archivo: File) => {
     setSubiendoImagen(true)
     try {
@@ -311,8 +738,7 @@ export default function AdminPage() {
         nombre: formData.nombre.trim(),
         descripcion: formData.descripcion.trim() || null,
         categoria: formData.categoria.trim() || null,
-        precio: formData.precio ? parseFloat(formData.precio) : null,
-        costo: formData.costo ? parseFloat(formData.costo) : null,
+        // precio, costo y porcentaje_ganancia se editan desde la tabla principal
         foto_url: formData.foto_url || null,
         publicado: formData.publicado
       }
@@ -324,16 +750,62 @@ export default function AdminPage() {
           .eq('id', productoEditando.id)
 
         if (error) throw error
-        toast.success('Producto actualizado correctamente')
+        
+        toast.success('Producto actualizado correctamente.')
       } else {
-        const { error } = await supabase
+        const { data: nuevoProducto, error } = await supabase
           .from('productos')
           .insert([productoData])
+          .select()
 
         if (error) throw error
-        toast.success('Producto agregado correctamente')
+        
+        // El nuevo producto se creará con valores por defecto
+        
+        toast.success('Producto agregado correctamente.')
       }
 
+      // Recargar productos para obtener los datos actualizados
+      await cargarProductos()
+      
+      // Si estamos editando un producto, mantener el formulario abierto con los datos actualizados
+      if (productoEditando) {
+        // Obtener los productos actualizados directamente de la base de datos
+        const { data: productosActualizados, error } = await supabase
+          .from('productos')
+          .select('*')
+          .eq('id', productoEditando.id)
+          .single()
+        
+        if (!error && productosActualizados) {
+          // Actualizar el producto que se está editando con los datos frescos de la BD
+          setProductoEditando(productosActualizados)
+          
+          // Recalcular el porcentaje con los datos actualizados
+          let porcentajeCalculado = '50' // default
+          if (productosActualizados.porcentaje_ganancia) {
+            porcentajeCalculado = productosActualizados.porcentaje_ganancia.toString()
+          } else if (margenesPersonalizados[productosActualizados.id]) {
+            porcentajeCalculado = margenesPersonalizados[productosActualizados.id].toString()
+          } else if (productosActualizados.costo && productosActualizados.precio && productosActualizados.costo > 0) {
+            const porcentaje = ((productosActualizados.precio - productosActualizados.costo) / productosActualizados.costo) * 100
+            porcentajeCalculado = porcentaje.toFixed(0)
+          }
+          
+          // Actualizar el formulario con los datos frescos
+          setFormData({
+            nombre: productosActualizados.nombre,
+            descripcion: productosActualizados.descripcion || '',
+            categoria: productosActualizados.categoria || '',
+            precio: productosActualizados.precio?.toString() || '',
+            costo: productosActualizados.costo?.toString() || '',
+            porcentaje_ganancia: porcentajeCalculado,
+            foto_url: productosActualizados.foto_url || '',
+            publicado: productosActualizados.publicado
+          })
+        }
+      } else {
+        // Si es un producto nuevo, cerrar el formulario
       setFormData({
         nombre: '',
         descripcion: '',
@@ -346,35 +818,105 @@ export default function AdminPage() {
       })
       setProductoEditando(null)
       setMostrarFormulario(false)
-      await cargarProductos()
+      }
     } catch (error) {
       console.error('Error:', error)
       toast.error('Error al guardar el producto')
     }
   }
 
-  const editarProducto = (producto: Producto) => {
-    setProductoEditando(producto)
-    
-    // Calcular porcentaje si tenemos costo y precio
+  const editarProducto = async (producto: Producto) => {
+    try {
+      // Obtener los datos frescos directamente de la base de datos
+      const { data: productoActualizado, error } = await supabase
+        .from('productos')
+        .select('*')
+        .eq('id', producto.id)
+        .single()
+
+      if (error) {
+        console.error('Error obteniendo producto actualizado:', error)
+        toast.error('Error al cargar los datos del producto')
+        return
+      }
+
+      if (!productoActualizado) {
+        toast.error('Producto no encontrado')
+        return
+      }
+
+      setProductoEditando(productoActualizado)
+      
+      // Usar el porcentaje_ganancia de la base de datos, o el margen personalizado, o calcular si no existe
     let porcentajeCalculado = '50' // default
-    if (producto.costo && producto.precio && producto.costo > 0) {
-      const porcentaje = ((producto.precio - producto.costo) / producto.costo) * 100
+      
+      // PRIORIDAD 1: Usar porcentaje_ganancia de la base de datos (incluso si es 0)
+      if (productoActualizado.porcentaje_ganancia !== null && productoActualizado.porcentaje_ganancia !== undefined) {
+        // Convertir a número y luego a string para asegurar formato correcto
+        const porcentajeBD = parseFloat(productoActualizado.porcentaje_ganancia.toString())
+        porcentajeCalculado = porcentajeBD.toString()
+        console.log('Usando porcentaje_ganancia de BD:', {
+          valorOriginal: productoActualizado.porcentaje_ganancia,
+          valorParseado: porcentajeBD,
+          valorFinal: porcentajeCalculado
+        })
+      } 
+      // PRIORIDAD 2: Usar margen personalizado del estado local
+      else if (margenesPersonalizados[productoActualizado.id]) {
+        porcentajeCalculado = margenesPersonalizados[productoActualizado.id].toString()
+        console.log('Usando margen personalizado:', margenesPersonalizados[productoActualizado.id])
+      } 
+      // PRIORIDAD 3: Calcular desde precio y costo
+      else if (productoActualizado.costo && productoActualizado.precio && productoActualizado.costo > 0) {
+        const porcentaje = ((productoActualizado.precio - productoActualizado.costo) / productoActualizado.costo) * 100
       porcentajeCalculado = porcentaje.toFixed(0)
-    }
-    
-    setFormData({
-      nombre: producto.nombre,
-      descripcion: producto.descripcion || '',
-      categoria: producto.categoria || '',
-      precio: producto.precio?.toString() || '',
-      costo: producto.costo?.toString() || '',
+        console.log('Calculando porcentaje desde precio/costo:', porcentaje)
+      }
+      // PRIORIDAD 4: Usar default 50%
+      else {
+        console.log('Usando porcentaje por defecto: 50%')
+      }
+      
+      console.log('Editando producto con datos frescos de BD:', {
+        id: productoActualizado.id,
+        nombre: productoActualizado.nombre,
+        porcentaje_ganancia: productoActualizado.porcentaje_ganancia,
+        costo: productoActualizado.costo,
+        precio: productoActualizado.precio,
+        margenPersonalizado: margenesPersonalizados[productoActualizado.id],
+        porcentajeCalculado,
+        productoCompleto: productoActualizado
+      })
+      
+      const nuevoFormData = {
+        nombre: productoActualizado.nombre,
+        descripcion: productoActualizado.descripcion || '',
+        categoria: productoActualizado.categoria || '',
+        precio: productoActualizado.precio?.toString() || '',
+        costo: productoActualizado.costo?.toString() || '',
       porcentaje_ganancia: porcentajeCalculado,
-      foto_url: producto.foto_url || '',
-      publicado: producto.publicado
-    })
-    setCalcularPrecioAutomatico(true) // Activar cálculo automático al editar
+        foto_url: productoActualizado.foto_url || '',
+        publicado: productoActualizado.publicado
+      }
+      
+      console.log('FormData que se va a establecer:', {
+        nombre: nuevoFormData.nombre,
+        precio: nuevoFormData.precio,
+        productoActualizado: {
+          porcentaje_ganancia: productoActualizado.porcentaje_ganancia,
+          costo: productoActualizado.costo,
+          precio: productoActualizado.precio
+        }
+      })
+      
+      setFormData(nuevoFormData)
     setMostrarFormulario(true)
+      
+      console.log('Formulario abierto - costo y margen se editan desde la tabla')
+    } catch (error) {
+      console.error('Error:', error)
+      toast.error('Error al cargar los datos del producto')
+    }
   }
 
   const cancelarEdicion = () => {
@@ -786,10 +1328,163 @@ export default function AdminPage() {
           </div>
         </div>
 
+        {/* Rankings - Solo en móvil, arriba */}
+        {isMobile && (
+          <div style={{
+            marginBottom: '2rem',
+            opacity: isVisible ? 1 : 0,
+            transform: isVisible ? 'translateY(0)' : 'translateY(30px)',
+            transition: 'all 1s ease-out 0.2s'
+          }}>
+            {/* Ranking de Productos Más Seleccionados */}
+            {productosPopulares.length > 0 && (
+              <div style={{
+                background: '#FFFFFF',
+                padding: '1.5rem',
+                borderRadius: '16px',
+                border: '1px solid #E5E7EB',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
+                marginBottom: '1.5rem'
+              }}>
+                <h3 style={{
+                  fontSize: '1.1rem',
+                  fontWeight: '600',
+                  color: '#1F2937',
+                  marginBottom: '1rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem'
+                }}>
+                  🏆 Productos Más Seleccionados
+                </h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  {productosPopulares.slice(0, 3).map((producto, index) => (
+                    <div key={producto.id} style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.75rem',
+                      padding: '0.75rem',
+                      background: '#F9FAFB',
+                      borderRadius: '8px',
+                      border: '1px solid #E5E7EB'
+                    }}>
+                      <div style={{
+                        width: '24px',
+                        height: '24px',
+                        borderRadius: '50%',
+                        background: index === 0 ? '#FFD700' : index === 1 ? '#C0C0C0' : '#CD7F32',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '0.75rem',
+                        fontWeight: '600',
+                        color: '#FFFFFF'
+                      }}>
+                        {index + 1}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{
+                          fontSize: '0.875rem',
+                          fontWeight: '500',
+                          color: '#1F2937',
+                          margin: 0,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {producto.nombre}
+                        </p>
+                        <p style={{
+                          fontSize: '0.75rem',
+                          color: '#6B7280',
+                          margin: 0
+                        }}>
+                          {producto.total_selecciones} selecciones
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Ranking de Productos Más Facturados */}
+            {productosFacturados.length > 0 && (
+              <div style={{
+                background: '#FFFFFF',
+                padding: '1.5rem',
+                borderRadius: '16px',
+                border: '1px solid #E5E7EB',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)'
+              }}>
+                <h3 style={{
+                  fontSize: '1.1rem',
+                  fontWeight: '600',
+                  color: '#1F2937',
+                  marginBottom: '1rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem'
+                }}>
+                  💰 Productos Más Facturados
+                </h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  {productosFacturados.slice(0, 3).map((producto, index) => (
+                    <div key={producto.id} style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.75rem',
+                      padding: '0.75rem',
+                      background: '#F9FAFB',
+                      borderRadius: '8px',
+                      border: '1px solid #E5E7EB'
+                    }}>
+                      <div style={{
+                        width: '24px',
+                        height: '24px',
+                        borderRadius: '50%',
+                        background: index === 0 ? '#FFD700' : index === 1 ? '#C0C0C0' : '#CD7F32',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '0.75rem',
+                        fontWeight: '600',
+                        color: '#FFFFFF'
+                      }}>
+                        {index + 1}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{
+                          fontSize: '0.875rem',
+                          fontWeight: '500',
+                          color: '#1F2937',
+                          margin: 0,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {producto.nombre}
+                        </p>
+                        <p style={{
+                          fontSize: '0.75rem',
+                          color: '#6B7280',
+                          margin: 0
+                        }}>
+                          ${producto.total_facturado.toFixed(2)}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Productos y Rankings */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: '1fr 400px',
+          gridTemplateColumns: isMobile ? '1fr' : '1fr 400px',
           gap: '2rem',
           marginBottom: '2rem',
           opacity: isVisible ? 1 : 0,
@@ -893,7 +1588,6 @@ export default function AdminPage() {
             
             <button
               onClick={descargarProductosCSV}
-              disabled={productos.length === 0}
               {...createButtonProps({ variant: 'info', size: 'md', disabled: productos.length === 0 })}
             >
               📥 Descargar CSV
@@ -905,8 +1599,148 @@ export default function AdminPage() {
             >
               📤 {mostrarCargaCSV ? 'Cerrar Carga' : 'Cargar CSV'}
             </button>
+
+
             
           </div>
+
+          {/* Botón de Edición Masiva */}
+          <div style={{ marginBottom: '2rem' }}>
+            <button
+              onClick={() => setMostrarEdicionMasiva(!mostrarEdicionMasiva)}
+              style={{
+                background: '#8B5CF6',
+                color: 'white',
+                border: 'none',
+                padding: '0.75rem 1.5rem',
+                borderRadius: '8px',
+                fontSize: '0.875rem',
+                fontWeight: '600',
+                cursor: 'pointer',
+                transition: 'all 0.3s ease',
+                boxShadow: '0 4px 15px rgba(139, 92, 246, 0.3)'
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)'
+                e.currentTarget.style.boxShadow = '0 6px 20px rgba(139, 92, 246, 0.4)'
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)'
+                e.currentTarget.style.boxShadow = '0 4px 15px rgba(139, 92, 246, 0.3)'
+              }}
+            >
+              💰 {mostrarEdicionMasiva ? 'Cerrar Edición Masiva' : 'Edición Masiva de Márgenes'}
+            </button>
+
+            {/* Panel de Edición Masiva */}
+            {mostrarEdicionMasiva && (
+              <div style={{
+                background: '#F8F9FA',
+                padding: '1.5rem',
+                borderRadius: '12px',
+                border: '1px solid #E5E7EB',
+                marginTop: '1rem'
+              }}>
+                <h3 style={{
+                  fontSize: '1.125rem',
+                  fontWeight: '600',
+                  color: '#111827',
+                  marginBottom: '1rem'
+                }}>
+                  💰 Edición Masiva de Márgenes
+                </h3>
+                
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+                  gap: '1rem',
+                  marginBottom: '1rem'
+                }}>
+                  {/* Margen Global */}
+                  <div>
+                    <label style={{
+                      display: 'block',
+                      fontSize: '0.875rem',
+                      fontWeight: '500',
+                      color: '#374151',
+                      marginBottom: '0.5rem'
+                    }}>
+                      Margen Global (%)
+                    </label>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <input
+                        type="number"
+                        placeholder="Ej: 50"
+                        value={margenGlobal || ''}
+                        onChange={(e) => setMargenGlobal(parseFloat(e.target.value) || 0)}
+                        style={{
+                          flex: 1,
+                          padding: '0.5rem 0.75rem',
+                          borderRadius: '6px',
+                          border: '1px solid #D1D5DB',
+                          background: '#FFFFFF',
+                          color: '#111827',
+                          fontSize: '0.875rem',
+                          outline: 'none'
+                        }}
+                      />
+                      <button
+                        onClick={aplicarMargenGlobal}
+                        style={{
+                          background: '#8B5CF6',
+                          color: 'white',
+                          border: 'none',
+                          padding: '0.5rem 1rem',
+                          borderRadius: '6px',
+                          fontSize: '0.875rem',
+                          fontWeight: '500',
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        Aplicar
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Botones de Acción */}
+                <div style={{
+                  display: 'flex',
+                  gap: '1rem',
+                  justifyContent: 'center',
+                  flexWrap: 'wrap'
+                }}>
+                  <button
+                    onClick={guardarMargenesPersonalizados}
+                    style={{
+                      background: '#10B981',
+                      color: 'white',
+                      border: 'none',
+                      padding: '0.75rem 1.5rem',
+                      borderRadius: '8px',
+                      fontSize: '0.875rem',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      transition: 'all 0.3s ease',
+                      boxShadow: '0 4px 15px rgba(16, 185, 129, 0.3)'
+                    }}
+                    onMouseOver={(e) => {
+                      e.currentTarget.style.transform = 'translateY(-2px)'
+                      e.currentTarget.style.boxShadow = '0 6px 20px rgba(16, 185, 129, 0.4)'
+                    }}
+                    onMouseOut={(e) => {
+                      e.currentTarget.style.transform = 'translateY(0)'
+                      e.currentTarget.style.boxShadow = '0 4px 15px rgba(16, 185, 129, 0.3)'
+                    }}
+                  >
+                    💾 Guardar Márgenes
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
 
           {/* Sección de carga CSV */}
           {mostrarCargaCSV && (
@@ -992,7 +1826,6 @@ export default function AdminPage() {
                 
                 <button
                   onClick={cargarProductosCSV}
-                  disabled={!archivoCSV || cargandoCSV}
                   {...createButtonProps({ 
                     variant: 'success', 
                     size: 'md', 
@@ -1005,202 +1838,238 @@ export default function AdminPage() {
             </div>
           )}
 
-            {/* Lista de Productos */}
-            <div style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '1rem',
-              marginTop: '2rem'
-            }}>
-              {productosFiltrados.map((producto, index) => (
-                <div key={producto.id} style={{
-                  background: '#FFFFFF',
-                  borderRadius: '12px',
-                  padding: '1.25rem',
-                  border: '1px solid #E5E7EB',
-                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '1.5rem',
-                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                  position: 'relative',
-                  overflow: 'hidden'
-                }}
-                onMouseOver={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-2px) scale(1.01)'
-                  e.currentTarget.style.boxShadow = '0 8px 20px rgba(0, 0, 0, 0.12)'
-                  e.currentTarget.style.border = '1px solid #D1D5DB'
-                }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0) scale(1)'
-                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.05)'
-                  e.currentTarget.style.border = '1px solid #E5E7EB'
+            {/* Lista de Productos - Vista de Tabla */}
+            {/* Vista de Tabla */}
+              <div style={{
+                background: '#FFFFFF',
+                borderRadius: '12px',
+                border: '1px solid #E5E7EB',
+                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)',
+                marginTop: '2rem',
+                overflow: 'hidden'
+              }}>
+                <div style={{
+                  background: '#F8F9FA',
+                  padding: '1rem',
+                  borderBottom: '1px solid #E5E7EB'
                 }}>
-                  {/* Indicador de estado */}
-                  <div style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    height: '4px',
-                    background: producto.publicado 
-                      ? 'linear-gradient(90deg, #10B981 0%, #059669 100%)' 
-                      : 'linear-gradient(90deg, #EF4444 0%, #DC2626 100%)',
-                    borderRadius: '12px 12px 0 0'
-                  }} />
-
-                  {/* Foto */}
-                  <div style={{
-                    width: '60px',
-                    height: '60px',
-                    borderRadius: '12px',
-                    overflow: 'hidden',
-                    flexShrink: 0,
-                    background: 'linear-gradient(135deg, #F8F9FA 0%, #E5E7EB 100%)',
-                    border: '1px solid #E5E7EB',
-                    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)'
+                  <h3 style={{
+                    fontSize: '1.125rem',
+                    fontWeight: '600',
+                    color: '#111827',
+                    margin: 0
                   }}>
-                    {producto.foto_url ? (
-                      <img
-                        src={producto.foto_url}
-                        alt={producto.nombre}
-                        style={{
-                          width: '100%',
-                          height: '100%',
-                          objectFit: 'contain',
-                          background: '#FFFFFF'
-                        }}
-                      />
-                    ) : (
-                      <div style={{
-                        width: '100%',
-                        height: '100%',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: '#9CA3AF',
-                        fontSize: '1.5rem'
-                      }}>
-                        📦
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Información principal */}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <h3 style={{
-                      color: '#111827',
-                      fontSize: '1.125rem',
-                      fontWeight: '600',
-                      marginBottom: '0.5rem',
-                      lineHeight: '1.3',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap'
-                    }}>
-                      {producto.nombre}
-                    </h3>
-                    
-                    {producto.descripcion && (
-                      <p style={{
-                        color: '#6B7280',
-                        fontSize: '0.875rem',
-                        lineHeight: '1.4',
-                        marginBottom: '0.5rem',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap'
-                      }}>
-                        {producto.descripcion}
-                      </p>
-                    )}
-
-                    <div style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '1.5rem',
-                      fontSize: '0.875rem',
-                      flexWrap: 'wrap'
-                    }}>
-                      {producto.categoria && (
-                        <span style={{
-                          background: '#F3F4F6',
-                          color: '#374151',
-                          padding: '0.25rem 0.75rem',
-                          borderRadius: '6px',
-                          fontSize: '0.75rem',
-                          fontWeight: '500'
-                        }}>
-                          {producto.categoria}
-                        </span>
-                      )}
-                      
-                      <span style={{
-                        color: '#111827',
-                        fontWeight: '600'
-                      }}>
-                        Precio: ${producto.precio?.toFixed(2) || 'No definido'}
-                      </span>
-                      
-                      <span style={{
-                        color: '#6B7280'
-                      }}>
-                        Costo: ${producto.costo?.toFixed(2) || 'No definido'}
-                      </span>
-                      
-                      <span style={{
-                        color: producto.publicado ? '#10B981' : '#EF4444',
-                        fontWeight: '500',
-                        fontSize: '0.75rem',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.05em'
-                      }}>
-                        {producto.publicado ? '✓ Publicado' : '✕ No publicado'}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Botones de acción */}
-                  <div style={{
-                    display: 'flex',
-                    gap: '0.75rem',
-                    flexShrink: 0,
-                    alignItems: 'center'
-                  }}>
-                    <button
-                      onClick={() => togglePublicado(producto.id, !producto.publicado)}
-                      {...createButtonProps({ 
-                        variant: producto.publicado ? 'danger' : 'success', 
-                        size: 'sm' 
-                      })}
-                      style={{
-                        ...createButtonProps({ 
-                          variant: producto.publicado ? 'danger' : 'success', 
-                          size: 'sm' 
-                        }).style,
-                        minWidth: '80px'
-                      }}
-                    >
-                      {producto.publicado ? 'Ocultar' : 'Publicar'}
-                    </button>
-                    
-                    <button
-                      onClick={() => editarProducto(producto)}
-                      {...createButtonProps({ variant: 'info', size: 'sm' })}
-                    >
-                      ✏️
-                    </button>
-                    
-                    <button
-                      onClick={() => eliminarProducto(producto.id)}
-                      {...createButtonProps({ variant: 'danger', size: 'sm' })}
-                    >
-                      🗑️
-                    </button>
-                  </div>
+                    📊 Gestión de Productos - Vista Tabla
+                  </h3>
                 </div>
-              ))}
-            </div>
+                
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{
+                    width: '100%',
+                    borderCollapse: 'collapse'
+                  }}>
+                    <thead>
+                      <tr style={{
+                        background: '#F3F4F6',
+                        borderBottom: '2px solid #E5E7EB'
+                      }}>
+                        <th style={{ padding: '1rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Producto</th>
+                        <th style={{ padding: '1rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Categoría</th>
+                        <th style={{ padding: '1rem', textAlign: 'right', fontWeight: '600', color: '#374151' }}>Costo</th>
+                        <th style={{ padding: '1rem', textAlign: 'right', fontWeight: '600', color: '#374151' }}>Margen (%)</th>
+                        <th style={{ padding: '1rem', textAlign: 'right', fontWeight: '600', color: '#374151' }}>Precio Final</th>
+                        <th style={{ padding: '1rem', textAlign: 'center', fontWeight: '600', color: '#374151' }}>Estado</th>
+                        <th style={{ padding: '1rem', textAlign: 'center', fontWeight: '600', color: '#374151' }}>Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {productosFiltrados.map((producto, index) => {
+                        const precioConGanancia = calcularPrecioConGanancia(producto)
+                        const margenActual = margenesPersonalizados[producto.id] ?? 
+                                           (producto.porcentaje_ganancia || margenGlobal || parseFloat(formData.porcentaje_ganancia) || 50)
+                        
+                        return (
+                          <tr key={producto.id} style={{
+                            borderBottom: '1px solid #E5E7EB',
+                            background: index % 2 === 0 ? '#FFFFFF' : '#F9FAFB'
+                          }}>
+                            <td style={{ padding: '1rem' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                {producto.foto_url && (
+                                  <img
+                                    src={producto.foto_url}
+                                    alt={producto.nombre}
+                                    style={{
+                                      width: '40px',
+                                      height: '40px',
+                                      borderRadius: '8px',
+                                      objectFit: 'cover'
+                                    }}
+                                  />
+                                )}
+                                <div>
+                                  <div style={{ fontWeight: '600', color: '#111827', marginBottom: '0.25rem' }}>
+                                    {producto.nombre}
+                                  </div>
+                                  {producto.descripcion && (
+                                    <div style={{ fontSize: '0.875rem', color: '#6B7280' }}>
+                                      {producto.descripcion.length > 50 
+                                        ? `${producto.descripcion.substring(0, 50)}...` 
+                                        : producto.descripcion
+                                      }
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+                            <td style={{ padding: '1rem', color: '#6B7280' }}>
+                              {producto.categoria || 'Sin categoría'}
+                            </td>
+                            <td style={{ padding: '1rem', textAlign: 'right' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                                <input
+                                  type="number"
+                                  value={producto.costo || ''}
+                                  onChange={(e) => {
+                                    const nuevoCosto = parseFloat(e.target.value) || 0
+                                    actualizarCostoProducto(producto.id, nuevoCosto)
+                                  }}
+                                  style={{
+                                    width: '100px',
+                                    padding: '0.25rem 0.5rem',
+                                    borderRadius: '4px',
+                                    border: '1px solid #D1D5DB',
+                                    fontSize: '0.875rem',
+                                    textAlign: 'right'
+                                  }}
+                                  placeholder="0.00"
+                                />
+                                <span style={{ color: '#6B7280', fontSize: '0.875rem' }}>$</span>
+                              </div>
+                            </td>
+                            <td style={{ padding: '1rem', textAlign: 'right' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                                <input
+                                  type="number"
+                                  value={margenActual}
+                                  onChange={(e) => {
+                                    const nuevoMargen = parseFloat(e.target.value) || 0
+                                    actualizarMargenProducto(producto.id, nuevoMargen)
+                                  }}
+                                  style={{
+                                    width: '80px',
+                                    padding: '0.25rem 0.5rem',
+                                    borderRadius: '4px',
+                                    border: '1px solid #D1D5DB',
+                                    fontSize: '0.875rem',
+                                    textAlign: 'right'
+                                  }}
+                                />
+                                <span style={{ color: '#6B7280', fontSize: '0.875rem' }}>%</span>
+                              </div>
+                            </td>
+                            <td style={{ padding: '1rem', textAlign: 'right', fontWeight: '600', color: '#10B981' }}>
+                              ${precioConGanancia.toFixed(2)}
+                            </td>
+                            <td style={{ padding: '1rem', textAlign: 'center' }}>
+                              <div
+                                onClick={() => togglePublicado(producto.id, !producto.publicado)}
+                                style={{
+                                  cursor: 'pointer',
+                                  fontSize: '1.5rem',
+                                  color: producto.publicado ? '#10B981' : '#EF4444',
+                                  fontWeight: 'bold',
+                                  transition: 'color 0.2s ease'
+                                }}
+                                title={producto.publicado ? 'Producto visible - Click para ocultar' : 'Producto oculto - Click para mostrar (si no está marcado, el producto no se ve)'}
+                                onMouseOver={(e) => {
+                                  e.currentTarget.style.opacity = '0.7'
+                                }}
+                                onMouseOut={(e) => {
+                                  e.currentTarget.style.opacity = '1'
+                                }}
+                              >
+                                {producto.publicado ? '✓' : '✗'}
+                              </div>
+                            </td>
+                            <td style={{ padding: '1rem', textAlign: 'center' }}>
+                              <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
+                                {(costosModificados.has(producto.id) || productosModificados.has(producto.id)) && (
+                                  <button
+                                    onClick={() => guardarProductoCompleto(producto.id)}
+                                    style={{
+                                      background: '#10B981',
+                                      color: 'white',
+                                      border: 'none',
+                                      padding: '0.25rem 0.5rem',
+                                      borderRadius: '4px',
+                                      fontSize: '0.75rem',
+                                      cursor: 'pointer',
+                                      fontWeight: '500'
+                                    }}
+                                    onMouseOver={(e) => {
+                                      e.currentTarget.style.backgroundColor = '#059669'
+                                    }}
+                                    onMouseOut={(e) => {
+                                      e.currentTarget.style.backgroundColor = '#10B981'
+                                    }}
+                                    title="Guardar cambios"
+                                  >
+                                    💾
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => {
+                                    setProductoEditando(producto)
+                                    setFormData({
+                                      nombre: producto.nombre,
+                                      descripcion: producto.descripcion || '',
+                                      categoria: producto.categoria || '',
+                                      precio: producto.precio?.toString() || '',
+                                      costo: producto.costo?.toString() || '',
+                                      porcentaje_ganancia: '50',
+                                      foto_url: producto.foto_url || '',
+                                      publicado: producto.publicado
+                                    })
+                                    setMostrarFormulario(true)
+                                  }}
+                                  style={{
+                                    background: '#3B82F6',
+                                    color: 'white',
+                                    border: 'none',
+                                    padding: '0.25rem 0.5rem',
+                                    borderRadius: '4px',
+                                    fontSize: '0.75rem',
+                                    cursor: 'pointer'
+                                  }}
+                                  title="Editar producto"
+                                >
+                                  ✏️
+                                </button>
+                                <button
+                                  onClick={() => eliminarProducto(producto.id)}
+                                  style={{
+                                    background: '#EF4444',
+                                    color: 'white',
+                                    border: 'none',
+                                    padding: '0.25rem 0.5rem',
+                                    borderRadius: '4px',
+                                    fontSize: '0.75rem',
+                                    cursor: 'pointer'
+                                  }}
+                                  title="Eliminar producto"
+                                >
+                                  🗑️
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
 
             {/* Mensaje cuando no hay productos */}
             {productosFiltrados.length === 0 && (
@@ -1248,157 +2117,8 @@ export default function AdminPage() {
             )}
           </div>
 
-          {/* Formulario de producto */}
-          {mostrarFormulario && (
-            <div style={{
-              position: 'fixed',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              background: 'rgba(0, 0, 0, 0.8)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              zIndex: 2000,
-              padding: '1rem'
-            }}>
-              <div style={{
-                background: '#FFFFFF',
-                padding: '2.5rem',
-                borderRadius: '20px',
-                border: '1px solid #E5E7EB',
-                maxWidth: '600px',
-                width: '100%',
-                maxHeight: '90vh',
-                overflowY: 'auto',
-                boxShadow: '0 25px 50px rgba(0, 0, 0, 0.3)'
-              }}>
-                <h3 style={{
-                  fontSize: '1.8rem',
-                  fontWeight: '800',
-                  color: '#111827',
-                  marginBottom: '1.5rem',
-                  textAlign: 'center'
-                }}>
-                  {editandoProducto ? '✏️ Editar Producto' : '➕ Nuevo Producto'}
-                </h3>
-                
-                <form onSubmit={manejarSubmit}>
-                      <p style={{
-                        fontSize: '0.75rem',
-                        color: '#6B7280',
-                        margin: '0 0 0.25rem 0'
-                      }}>
-                        Costo
-                      </p>
-                      <p style={{
-                        fontSize: '1rem',
-                        fontWeight: '600',
-                        color: '#111827',
-                        margin: 0
-                      }}>
-                        ${producto.costo?.toFixed(2) || 'No definido'}
-                      </p>
-                      </div>
-            </div>
-
-            <div style={{
-              display: 'flex',
-                    justifyContent: 'space-between',
-                      alignItems: 'center',
-                    marginBottom: '1rem'
-                  }}>
-                    <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem'
-                    }}>
-                      <span style={{
-                        fontSize: '0.875rem',
-                        color: '#6B7280'
-                      }}>
-                        Estado:
-                      </span>
-                      <span style={{
-                        fontSize: '0.875rem',
-                        fontWeight: '500',
-                        color: producto.publicado ? '#10B981' : '#EF4444'
-                      }}>
-                        {producto.publicado ? 'Publicado' : 'No publicado'}
-                      </span>
-                    </div>
-                    <button
-                      onClick={() => togglePublicado(producto.id, !producto.publicado)}
-                      {...createButtonProps({ 
-                        variant: producto.publicado ? 'danger' : 'success', 
-                        size: 'sm' 
-                      })}
-                    >
-                      {producto.publicado ? 'Despublicar' : 'Publicar'}
-                    </button>
-        </div>
-
-        <div style={{
-          display: 'flex',
-                    gap: '0.5rem',
-                    flexWrap: 'wrap'
-        }}>
-                    <button
-                      onClick={() => editarProducto(producto)}
-                      {...createButtonProps({ variant: 'info', size: 'sm' })}
-                      style={{
-                        ...createButtonProps({ variant: 'info', size: 'sm' }).style,
-                        flex: 1
-                      }}
-                    >
-                      ✏️ Editar
-                    </button>
-                    <button
-                      onClick={() => eliminarProducto(producto.id)}
-                      {...createButtonProps({ variant: 'danger', size: 'sm' })}
-                      style={{
-                        ...createButtonProps({ variant: 'danger', size: 'sm' }).style,
-                        flex: 1
-                      }}
-                    >
-                      🗑️ Eliminar
-                    </button>
-            </div>
-                  </div>
-                )
-              ))}
-
-              {productosFiltrados.length === 0 && (
-              <div style={{
-                  textAlign: 'center',
-                  padding: '3rem',
-                  color: '#6B7280',
-                  gridColumn: '1 / -1'
-                }}>
-                  <div style={{ fontSize: '4rem', marginBottom: '1rem' }}>
-                    {busquedaAdmin ? '🔍' : '📦'}
-                  </div>
-                  <h3 style={{
-                    fontSize: '1.25rem',
-                    fontWeight: '600',
-                    color: '#111827',
-                    marginBottom: '0.5rem'
-                  }}>
-                    {busquedaAdmin ? 'No se encontraron productos' : 'No hay productos'}
-                  </h3>
-                  <p>
-                    {busquedaAdmin 
-                      ? `No hay productos que coincidan con "${busquedaAdmin}"`
-                      : 'Agrega tu primer producto para comenzar'
-                    }
-                </p>
-              </div>
-            )}
-          </div>
-          </div>
-
-          {/* Rankings en formato cuadrado */}
+          {/* Rankings en formato cuadrado - Solo en desktop */}
+          {!isMobile && (
         <div style={{
             display: 'flex',
             flexDirection: 'column',
@@ -1603,6 +2323,7 @@ export default function AdminPage() {
             )}
           </div>
         </div>
+        )}
       </main>
 
       {/* Modal de Formulario */}
@@ -1776,182 +2497,9 @@ export default function AdminPage() {
                 />
               </div>
               
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr',
-                gap: '1rem',
-                marginBottom: '1.5rem'
-              }}>
-              <div>
-                <label style={{
-                  display: 'block',
-                    marginBottom: '0.5rem',
-                    fontWeight: '500',
-                    color: '#374151',
-                    fontSize: '0.875rem'
-                  }}>
-                    Costo *
-                </label>
-                <input
-                  type="number"
-                    name="costo"
-                    value={formData.costo}
-                    onChange={(e) => manejarCambioCosto(e.target.value)}
-                  step="0.01"
-                    min="0"
-                    required
-                  style={{
-                    width: '100%',
-                      padding: '0.75rem',
-                      borderRadius: '8px',
-                      border: '1px solid #D1D5DB',
-                    fontSize: '1rem',
-                    outline: 'none',
-                      transition: 'border-color 0.2s ease',
-                      boxSizing: 'border-box'
-                  }}
-                  onFocus={(e) => {
-                      e.target.style.borderColor = '#3B82F6'
-                  }}
-                  onBlur={(e) => {
-                      e.target.style.borderColor = '#D1D5DB'
-                  }}
-                />
-              </div>
-              <div>
-                <label style={{
-                  display: 'block',
-                  marginBottom: '0.5rem',
-                  fontWeight: '500',
-                  color: '#374151',
-                  fontSize: '0.875rem'
-                }}>
-                  % Ganancia
-                </label>
-                <input
-                  type="number"
-                  name="porcentaje_ganancia"
-                  value={formData.porcentaje_ganancia}
-                  onChange={(e) => manejarCambioPorcentaje(e.target.value)}
-                  step="1"
-                  min="0"
-                  max="1000"
-                  style={{
-                    width: '100%',
-                    padding: '0.75rem',
-                    borderRadius: '8px',
-                    border: '1px solid #D1D5DB',
-                    fontSize: '1rem',
-                    outline: 'none',
-                    transition: 'border-color 0.2s ease',
-                    boxSizing: 'border-box'
-                  }}
-                  onFocus={(e) => {
-                    e.target.style.borderColor = '#3B82F6'
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.borderColor = '#D1D5DB'
-                  }}
-                />
-                <p style={{
-                  fontSize: '0.75rem',
-                  color: '#6B7280',
-                  marginTop: '0.25rem',
-                  margin: '0.25rem 0 0 0'
-                }}>
-                  Porcentaje de ganancia sobre el costo
-                </p>
-              </div>
-              </div>
+              {/* Costo y margen se editan desde la tabla principal */}
 
-              <div style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr auto',
-              gap: '1rem',
-              marginBottom: '1.5rem',
-              alignItems: 'end'
-            }}>
-                  <div>
-                    <label style={{
-                      display: 'block',
-                  marginBottom: '0.5rem',
-                  fontWeight: '500',
-                  color: '#374151',
-                  fontSize: '0.875rem'
-                }}>
-                  Precio de Venta
-                    </label>
-                    <input
-                      type="number"
-                  name="precio"
-                  value={formData.precio}
-                  onChange={(e) => {
-                    setFormData({...formData, [e.target.name]: e.target.value})
-                    if (e.target.value) {
-                      setCalcularPrecioAutomatico(false)
-                    }
-                  }}
-                  step="0.01"
-                      min="0"
-                  disabled={calcularPrecioAutomatico}
-                  placeholder={calcularPrecioAutomatico ? 'Calculado automáticamente' : 'Precio manual'}
-                      style={{
-                        width: '100%',
-                    padding: '0.75rem',
-                        borderRadius: '8px',
-                    border: '1px solid #D1D5DB',
-                    fontSize: '1rem',
-                        outline: 'none',
-                    transition: 'border-color 0.2s ease',
-                    boxSizing: 'border-box',
-                    backgroundColor: calcularPrecioAutomatico ? '#F9FAFB' : '#FFFFFF',
-                    color: calcularPrecioAutomatico ? '#6B7280' : '#111827'
-                  }}
-                  onFocus={(e) => {
-                    if (!calcularPrecioAutomatico) {
-                      e.target.style.borderColor = '#3B82F6'
-                    }
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.borderColor = '#D1D5DB'
-                  }}
-                />
-              </div>
-              
-              <div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCalcularPrecioAutomatico(!calcularPrecioAutomatico)
-                    if (!calcularPrecioAutomatico && formData.costo && formData.porcentaje_ganancia) {
-                      // Recalcular precio cuando se activa el automático
-                      const nuevoPrecio = calcularPrecioVenta(formData.costo, formData.porcentaje_ganancia, true)
-                      setFormData(prev => ({ ...prev, precio: nuevoPrecio }))
-                    }
-                  }}
-                  style={{
-                    background: calcularPrecioAutomatico ? '#10B981' : '#6B7280',
-                    color: '#FFFFFF',
-                    border: 'none',
-                    padding: '0.75rem 1rem',
-                    borderRadius: '8px',
-                    fontSize: '0.875rem',
-                    fontWeight: '500',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s ease',
-                    whiteSpace: 'nowrap'
-                  }}
-                  onMouseOver={(e) => {
-                    e.currentTarget.style.opacity = '0.8'
-                  }}
-                  onMouseOut={(e) => {
-                    e.currentTarget.style.opacity = '1'
-                  }}
-                >
-                  {calcularPrecioAutomatico ? '🔄 Auto' : '✏️ Manual'}
-                </button>
-                  </div>
-            </div>
+              {/* Precio se calcula automáticamente desde costo y margen en la tabla */}
                 
             <div style={{ marginBottom: '1.5rem' }}>
                   <label style={{
