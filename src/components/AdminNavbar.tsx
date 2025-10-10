@@ -7,6 +7,7 @@ import { useState, useEffect } from 'react'
 export default function AdminNavbar() {
   const pathname = usePathname()
   const [isMobile, setIsMobile] = useState(true) // Inicializar como true para evitar flash
+  const [isMenuOpen, setIsMenuOpen] = useState(false)
 
   // Detectar tamaño de pantalla
   useEffect(() => {
@@ -19,6 +20,24 @@ export default function AdminNavbar() {
     
     return () => window.removeEventListener('resize', checkScreenSize)
   }, [])
+
+  // Cerrar menú al hacer clic fuera
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement
+      if (!target.closest('.admin-navbar')) {
+        setIsMenuOpen(false)
+      }
+    }
+
+    if (isMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [isMenuOpen])
 
   const navItems = [
     { 
@@ -113,135 +132,167 @@ export default function AdminNavbar() {
     }
   ]
 
+  // Encontrar el item activo
+  const activeItem = navItems.find(item => pathname === item.href)
+
   return (
-    <nav style={{
-      background: 'linear-gradient(135deg, #111827 0%, #1F2937 100%)',
-      borderBottom: '1px solid #374151',
-      padding: '1.25rem 0',
-      marginBottom: '2rem',
-      position: 'sticky',
-      top: '80px',
-      zIndex: 100,
-      boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15)',
-      backdropFilter: 'blur(10px)'
-    }}>
+    <nav 
+      className="admin-navbar"
+      style={{
+        background: 'linear-gradient(135deg, #111827 0%, #1F2937 100%)',
+        borderBottom: '1px solid #374151',
+        padding: '1rem 0',
+        marginBottom: '2rem',
+        position: 'sticky',
+        top: '80px',
+        zIndex: 100,
+        boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15)',
+        backdropFilter: 'blur(10px)'
+      }}
+    >
       <div style={{
         maxWidth: '1400px',
         margin: '0 auto',
         padding: '0 1rem',
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'center',
-        gap: isMobile ? '0.1rem' : '0.25rem',
-        flexWrap: 'wrap',
-        justifyContent: 'space-between'
+        justifyContent: 'center'
       }}>
-        {navItems.map((item) => {
-          const isActive = pathname === item.href
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
+        {/* Botón del menú desplegable */}
+        <div style={{ position: 'relative' }}>
+          <button
+            onClick={() => setIsMenuOpen(!isMenuOpen)}
+            style={{
+              background: 'linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 100%)',
+              border: '1px solid #E5E7EB',
+              borderRadius: '12px',
+              padding: '0.75rem 1.5rem',
+              fontSize: '0.875rem',
+              fontWeight: '600',
+              color: '#111827',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.75rem',
+              transition: 'all 0.3s ease',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+              minWidth: '200px',
+              justifyContent: 'space-between'
+            }}
+            onMouseOver={(e) => {
+              e.currentTarget.style.transform = 'translateY(-2px)'
+              e.currentTarget.style.boxShadow = '0 8px 20px rgba(0, 0, 0, 0.2)'
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)'
+              e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)'
+            }}
+          >
+            {/* Ícono y texto del item activo */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              {activeItem && (
+                <div style={{ color: activeItem.color }}>
+                  {activeItem.icon}
+                </div>
+              )}
+              <span>
+                {activeItem ? activeItem.label : 'Administración'}
+              </span>
+            </div>
+            
+            {/* Flecha del desplegable */}
+            <svg 
+              width="16" 
+              height="16" 
+              viewBox="0 0 24 24" 
+              fill="none" 
               style={{
-                textDecoration: 'none',
-                padding: isMobile ? '0.4rem 0.5rem' : '0.875rem 1.25rem',
-                borderRadius: '8px',
-                fontSize: isMobile ? '0.7rem' : '0.875rem',
-                fontWeight: '500',
-                fontFamily: 'system-ui, -apple-system, sans-serif',
-                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: isMobile ? '0.25rem' : '0.5rem',
-                position: 'relative',
-                minWidth: 'auto',
-                whiteSpace: 'nowrap',
-                background: isActive 
-                  ? 'linear-gradient(135deg, #FFFFFF 0%, #F8FAFC 100%)'
-                  : 'rgba(255, 255, 255, 0.05)',
-                color: isActive ? '#111827' : '#E5E7EB',
-                border: isActive 
-                  ? '1px solid #E5E7EB' 
-                  : '1px solid rgba(255, 255, 255, 0.1)',
-                boxShadow: isActive 
-                  ? '0 4px 12px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.2)' 
-                  : '0 2px 4px rgba(0, 0, 0, 0.1)',
-                backdropFilter: 'blur(10px)',
-                overflow: 'hidden'
-              }}
-              onMouseOver={(e) => {
-                if (!isActive) {
-                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)'
-                  e.currentTarget.style.color = '#FFFFFF'
-                  e.currentTarget.style.transform = 'translateY(-2px) scale(1.02)'
-                  e.currentTarget.style.boxShadow = '0 8px 20px rgba(0, 0, 0, 0.2)'
-                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)'
-                } else {
-                  e.currentTarget.style.transform = 'translateY(-1px) scale(1.01)'
-                  e.currentTarget.style.boxShadow = '0 6px 16px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3)'
-                }
-              }}
-              onMouseOut={(e) => {
-                if (!isActive) {
-                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'
-                  e.currentTarget.style.color = '#E5E7EB'
-                  e.currentTarget.style.transform = 'translateY(0) scale(1)'
-                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.1)'
-                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)'
-                } else {
-                  e.currentTarget.style.transform = 'translateY(0) scale(1)'
-                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.2)'
-                }
+                transform: isMenuOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                transition: 'transform 0.3s ease'
               }}
             >
-              {/* Indicador de color activo */}
-              {isActive && (
-                <div style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  height: '3px',
-                  background: `linear-gradient(90deg, ${item.color} 0%, ${item.color}CC 100%)`,
-                  borderRadius: '10px 10px 0 0'
-                }} />
-              )}
-              
-              {/* Ícono con color dinámico */}
-              <div style={{
-                color: isActive ? item.color : 'currentColor',
-                transition: 'all 0.3s ease',
-                display: 'flex',
-                alignItems: 'center'
-              }}>
-                {item.icon}
-              </div>
-              
-              {/* Texto */}
-              <span style={{
-                fontWeight: isActive ? '600' : '500',
-                letterSpacing: isActive ? '0.025em' : '0',
-                transition: 'all 0.3s ease'
-              }}>
-                {item.label}
-              </span>
-              
-              {/* Efecto de brillo sutil */}
-              {!isActive && (
-                <div style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: '-100%',
-                  width: '100%',
-                  height: '100%',
-                  background: 'linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent)',
-                  transition: 'left 0.6s ease',
-                  pointerEvents: 'none'
-                }} />
-              )}
-            </Link>
-          )
-        })}
+              <path d="M6 9L12 15L18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+
+          {/* Menú desplegable */}
+          {isMenuOpen && (
+            <div style={{
+              position: 'absolute',
+              top: '100%',
+              left: 0,
+              right: 0,
+              background: '#FFFFFF',
+              border: '1px solid #E5E7EB',
+              borderRadius: '12px',
+              boxShadow: '0 20px 40px rgba(0, 0, 0, 0.15)',
+              marginTop: '0.5rem',
+              overflow: 'hidden',
+              zIndex: 1000,
+              minWidth: '250px'
+            }}>
+              {navItems.map((item, index) => {
+                const isActive = pathname === item.href
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setIsMenuOpen(false)}
+                    style={{
+                      textDecoration: 'none',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.75rem',
+                      padding: '0.875rem 1rem',
+                      color: isActive ? '#111827' : '#6B7280',
+                      background: isActive ? '#F3F4F6' : 'transparent',
+                      borderLeft: isActive ? `3px solid ${item.color}` : '3px solid transparent',
+                      transition: 'all 0.2s ease',
+                      fontSize: '0.875rem',
+                      fontWeight: isActive ? '600' : '500'
+                    }}
+                    onMouseOver={(e) => {
+                      if (!isActive) {
+                        e.currentTarget.style.background = '#F9FAFB'
+                        e.currentTarget.style.color = '#111827'
+                      }
+                    }}
+                    onMouseOut={(e) => {
+                      if (!isActive) {
+                        e.currentTarget.style.background = 'transparent'
+                        e.currentTarget.style.color = '#6B7280'
+                      }
+                    }}
+                  >
+                    {/* Ícono */}
+                    <div style={{
+                      color: isActive ? item.color : '#9CA3AF',
+                      display: 'flex',
+                      alignItems: 'center',
+                      minWidth: '16px'
+                    }}>
+                      {item.icon}
+                    </div>
+                    
+                    {/* Texto */}
+                    <span>{item.label}</span>
+                    
+                    {/* Indicador de activo */}
+                    {isActive && (
+                      <div style={{
+                        marginLeft: 'auto',
+                        width: '6px',
+                        height: '6px',
+                        borderRadius: '50%',
+                        background: item.color
+                      }} />
+                    )}
+                  </Link>
+                )
+              })}
+            </div>
+          )}
+        </div>
       </div>
     </nav>
   )

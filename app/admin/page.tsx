@@ -67,6 +67,9 @@ export default function AdminPage() {
   const [busquedaAdmin, setBusquedaAdmin] = useState('')
   const [productosFiltrados, setProductosFiltrados] = useState<Producto[]>([])
   const [isMobile, setIsMobile] = useState(true) // Inicializar como true para evitar flash
+  const [rankingSeleccionadosAbierto, setRankingSeleccionadosAbierto] = useState(false)
+  const [rankingFacturadosAbierto, setRankingFacturadosAbierto] = useState(false)
+  const [filasDesplegadas, setFilasDesplegadas] = useState<Set<string>>(new Set())
 
   // Detectar tamaño de pantalla
   useEffect(() => {
@@ -1279,7 +1282,7 @@ export default function AdminPage() {
         zIndex: 3,
         maxWidth: '1400px',
         margin: '0 auto',
-        padding: '2rem 1rem',
+        padding: isMobile ? '2rem 0.5rem' : '2rem 1rem',
         minHeight: '100vh'
       }}>
         {/* Header */}
@@ -1340,71 +1343,113 @@ export default function AdminPage() {
             {productosPopulares.length > 0 && (
               <div style={{
                 background: '#FFFFFF',
-                padding: '1.5rem',
                 borderRadius: '16px',
                 border: '1px solid #E5E7EB',
                 boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
-                marginBottom: '1.5rem'
+                marginBottom: '1.5rem',
+                overflow: 'hidden'
               }}>
-                <h3 style={{
-                  fontSize: '1.1rem',
-                  fontWeight: '600',
-                  color: '#1F2937',
-                  marginBottom: '1rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem'
-                }}>
-                  🏆 Productos Más Seleccionados
-                </h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  {productosPopulares.slice(0, 3).map((producto, index) => (
-                    <div key={producto.id} style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.75rem',
-                      padding: '0.75rem',
-                      background: '#F9FAFB',
-                      borderRadius: '8px',
-                      border: '1px solid #E5E7EB'
-                    }}>
-                      <div style={{
-                        width: '24px',
-                        height: '24px',
-                        borderRadius: '50%',
-                        background: index === 0 ? '#FFD700' : index === 1 ? '#C0C0C0' : '#CD7F32',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: '0.75rem',
-                        fontWeight: '600',
-                        color: '#FFFFFF'
-                      }}>
-                        {index + 1}
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{
-                          fontSize: '0.875rem',
-                          fontWeight: '500',
-                          color: '#1F2937',
-                          margin: 0,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap'
+                <button
+                  onClick={() => setRankingSeleccionadosAbierto(!rankingSeleccionadosAbierto)}
+                  style={{
+                    width: '100%',
+                    background: 'transparent',
+                    border: 'none',
+                    padding: '1.5rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    transition: 'background-color 0.2s ease'
+                  }}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.background = '#F9FAFB'
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.background = 'transparent'
+                  }}
+                >
+                  <h3 style={{
+                    fontSize: '1.1rem',
+                    fontWeight: '600',
+                    color: '#1F2937',
+                    margin: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem'
+                  }}>
+                    🏆 Productos Más Seleccionados
+                  </h3>
+                  <svg 
+                    width="20" 
+                    height="20" 
+                    viewBox="0 0 24 24" 
+                    fill="none" 
+                    style={{
+                      transform: rankingSeleccionadosAbierto ? 'rotate(180deg)' : 'rotate(0deg)',
+                      transition: 'transform 0.3s ease',
+                      color: '#6B7280'
+                    }}
+                  >
+                    <path d="M6 9L12 15L18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
+                
+                {rankingSeleccionadosAbierto && (
+                  <div style={{ 
+                    padding: '0 1.5rem 1.5rem 1.5rem',
+                    borderTop: '1px solid #E5E7EB'
+                  }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                      {productosPopulares.slice(0, 3).map((producto, index) => (
+                        <div key={producto.id} style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.75rem',
+                          padding: '0.75rem',
+                          background: '#F9FAFB',
+                          borderRadius: '8px',
+                          border: '1px solid #E5E7EB'
                         }}>
-                          {producto.nombre}
-                        </p>
-                        <p style={{
-                          fontSize: '0.75rem',
-                          color: '#6B7280',
-                          margin: 0
-                        }}>
-                          {producto.total_selecciones} selecciones
-                        </p>
-                      </div>
+                          <div style={{
+                            width: '24px',
+                            height: '24px',
+                            borderRadius: '50%',
+                            background: index === 0 ? '#FFD700' : index === 1 ? '#C0C0C0' : '#CD7F32',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '0.75rem',
+                            fontWeight: '600',
+                            color: '#FFFFFF'
+                          }}>
+                            {index + 1}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <p style={{
+                              fontSize: '0.875rem',
+                              fontWeight: '500',
+                              color: '#1F2937',
+                              margin: 0,
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap'
+                            }}>
+                              {producto.nombre}
+                            </p>
+                            <p style={{
+                              fontSize: '0.75rem',
+                              color: '#6B7280',
+                              margin: 0
+                            }}>
+                              {producto.total_selecciones} selecciones
+                            </p>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -1412,70 +1457,112 @@ export default function AdminPage() {
             {productosFacturados.length > 0 && (
               <div style={{
                 background: '#FFFFFF',
-                padding: '1.5rem',
                 borderRadius: '16px',
                 border: '1px solid #E5E7EB',
-                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)'
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
+                overflow: 'hidden'
               }}>
-                <h3 style={{
-                  fontSize: '1.1rem',
-                  fontWeight: '600',
-                  color: '#1F2937',
-                  marginBottom: '1rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem'
-                }}>
-                  💰 Productos Más Facturados
-                </h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  {productosFacturados.slice(0, 3).map((producto, index) => (
-                    <div key={producto.id} style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.75rem',
-                      padding: '0.75rem',
-                      background: '#F9FAFB',
-                      borderRadius: '8px',
-                      border: '1px solid #E5E7EB'
-                    }}>
-                      <div style={{
-                        width: '24px',
-                        height: '24px',
-                        borderRadius: '50%',
-                        background: index === 0 ? '#FFD700' : index === 1 ? '#C0C0C0' : '#CD7F32',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: '0.75rem',
-                        fontWeight: '600',
-                        color: '#FFFFFF'
-                      }}>
-                        {index + 1}
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{
-                          fontSize: '0.875rem',
-                          fontWeight: '500',
-                          color: '#1F2937',
-                          margin: 0,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap'
+                <button
+                  onClick={() => setRankingFacturadosAbierto(!rankingFacturadosAbierto)}
+                  style={{
+                    width: '100%',
+                    background: 'transparent',
+                    border: 'none',
+                    padding: '1.5rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    transition: 'background-color 0.2s ease'
+                  }}
+                  onMouseOver={(e) => {
+                    e.currentTarget.style.background = '#F9FAFB'
+                  }}
+                  onMouseOut={(e) => {
+                    e.currentTarget.style.background = 'transparent'
+                  }}
+                >
+                  <h3 style={{
+                    fontSize: '1.1rem',
+                    fontWeight: '600',
+                    color: '#1F2937',
+                    margin: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem'
+                  }}>
+                    💰 Productos Más Facturados
+                  </h3>
+                  <svg 
+                    width="20" 
+                    height="20" 
+                    viewBox="0 0 24 24" 
+                    fill="none" 
+                    style={{
+                      transform: rankingFacturadosAbierto ? 'rotate(180deg)' : 'rotate(0deg)',
+                      transition: 'transform 0.3s ease',
+                      color: '#6B7280'
+                    }}
+                  >
+                    <path d="M6 9L12 15L18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
+                
+                {rankingFacturadosAbierto && (
+                  <div style={{ 
+                    padding: '0 1.5rem 1.5rem 1.5rem',
+                    borderTop: '1px solid #E5E7EB'
+                  }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                      {productosFacturados.slice(0, 3).map((producto, index) => (
+                        <div key={producto.id} style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.75rem',
+                          padding: '0.75rem',
+                          background: '#F9FAFB',
+                          borderRadius: '8px',
+                          border: '1px solid #E5E7EB'
                         }}>
-                          {producto.nombre}
-                        </p>
-                        <p style={{
-                          fontSize: '0.75rem',
-                          color: '#6B7280',
-                          margin: 0
-                        }}>
-                          ${producto.total_facturado.toFixed(2)}
-                        </p>
-                      </div>
+                          <div style={{
+                            width: '24px',
+                            height: '24px',
+                            borderRadius: '50%',
+                            background: index === 0 ? '#FFD700' : index === 1 ? '#C0C0C0' : '#CD7F32',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '0.75rem',
+                            fontWeight: '600',
+                            color: '#FFFFFF'
+                          }}>
+                            {index + 1}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <p style={{
+                              fontSize: '0.875rem',
+                              fontWeight: '500',
+                              color: '#1F2937',
+                              margin: 0,
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap'
+                            }}>
+                              {producto.nombre}
+                            </p>
+                            <p style={{
+                              fontSize: '0.75rem',
+                              color: '#6B7280',
+                              margin: 0
+                            }}>
+                              ${producto.total_facturado.toFixed(2)}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1863,23 +1950,338 @@ export default function AdminPage() {
                   </h3>
                 </div>
                 
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{
-                    width: '100%',
-                    borderCollapse: 'collapse'
-                  }}>
+                <div style={{ 
+                  overflowX: isMobile ? 'visible' : 'auto',
+                  width: '100%'
+                }}>
+                  {isMobile ? (
+                    // Vista móvil: lista compacta
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      {productosFiltrados.map((producto, index) => {
+                        const precioConGanancia = calcularPrecioConGanancia(producto)
+                        const margenActual = margenesPersonalizados[producto.id] ?? 
+                                           (producto.porcentaje_ganancia || margenGlobal || parseFloat(formData.porcentaje_ganancia) || 50)
+                        const isDesplegado = filasDesplegadas.has(producto.id)
+                        
+                        return (
+                          <div key={producto.id} style={{
+                            background: index % 2 === 0 ? '#FFFFFF' : '#F9FAFB',
+                            border: '1px solid #E5E7EB',
+                            borderRadius: '8px',
+                            overflow: 'hidden'
+                          }}>
+                            {/* Fila principal */}
+                            <div style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              padding: '0.75rem',
+                              gap: '0.5rem'
+                            }}>
+                              {/* Imagen */}
+                              {producto.foto_url && (
+                                <img
+                                  src={producto.foto_url}
+                                  alt={producto.nombre}
+                                  style={{
+                                    width: '40px',
+                                    height: '40px',
+                                    borderRadius: '6px',
+                                    objectFit: 'cover',
+                                    flexShrink: 0
+                                  }}
+                                />
+                              )}
+                              
+                              {/* Nombre y precio */}
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{
+                                  fontWeight: '600',
+                                  color: '#111827',
+                                  fontSize: '0.8rem',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                  marginBottom: '0.25rem'
+                                }}>
+                                  {producto.nombre}
+                                </div>
+                                <div style={{
+                                  fontSize: '0.7rem',
+                                  color: '#10B981',
+                                  fontWeight: '500'
+                                }}>
+                                  ${precioConGanancia.toFixed(2)}
+                                </div>
+                              </div>
+                              
+                              {/* Estado */}
+                              <div
+                                onClick={() => togglePublicado(producto.id, !producto.publicado)}
+                                style={{
+                                  cursor: 'pointer',
+                                  fontSize: '1.2rem',
+                                  color: producto.publicado ? '#10B981' : '#EF4444',
+                                  fontWeight: 'bold',
+                                  marginRight: '0.5rem'
+                                }}
+                                title={producto.publicado ? 'Visible' : 'Oculto'}
+                              >
+                                {producto.publicado ? '✓' : '✗'}
+                              </div>
+                              
+                              {/* Botón desplegar */}
+                              <button
+                                onClick={() => {
+                                  const newSet = new Set(filasDesplegadas)
+                                  if (isDesplegado) {
+                                    newSet.delete(producto.id)
+                                  } else {
+                                    newSet.add(producto.id)
+                                  }
+                                  setFilasDesplegadas(newSet)
+                                }}
+                                style={{
+                                  background: 'transparent',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  padding: '0.25rem',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center'
+                                }}
+                              >
+                                <svg 
+                                  width="16" 
+                                  height="16" 
+                                  viewBox="0 0 24 24" 
+                                  fill="none"
+                                  style={{
+                                    transform: isDesplegado ? 'rotate(180deg)' : 'rotate(0deg)',
+                                    transition: 'transform 0.3s ease',
+                                    color: '#6B7280'
+                                  }}
+                                >
+                                  <path d="M6 9L12 15L18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                </svg>
+                              </button>
+                            </div>
+                            
+                            {/* Contenido desplegable */}
+                            {isDesplegado && (
+                              <div style={{
+                                borderTop: '1px solid #E5E7EB',
+                                padding: '0.75rem',
+                                background: '#F8F9FA'
+                              }}>
+                                <div style={{
+                                  display: 'grid',
+                                  gridTemplateColumns: '1fr 1fr',
+                                  gap: '0.75rem',
+                                  marginBottom: '0.75rem'
+                                }}>
+                                  {/* Costo */}
+                                  <div>
+                                    <label style={{
+                                      display: 'block',
+                                      fontSize: '0.7rem',
+                                      color: '#6B7280',
+                                      marginBottom: '0.25rem',
+                                      fontWeight: '500'
+                                    }}>
+                                      Costo
+                                    </label>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                      <input
+                                        type="number"
+                                        value={producto.costo || ''}
+                                        onChange={(e) => {
+                                          const nuevoCosto = parseFloat(e.target.value) || 0
+                                          actualizarCostoProducto(producto.id, nuevoCosto)
+                                        }}
+                                        style={{
+                                          width: '100%',
+                                          padding: '0.3rem 0.5rem',
+                                          borderRadius: '4px',
+                                          border: '1px solid #D1D5DB',
+                                          fontSize: '0.7rem',
+                                          textAlign: 'right'
+                                        }}
+                                        placeholder="0.00"
+                                      />
+                                      <span style={{ color: '#6B7280', fontSize: '0.7rem' }}>$</span>
+                                    </div>
+                                  </div>
+                                  
+                                  {/* Margen */}
+                                  <div>
+                                    <label style={{
+                                      display: 'block',
+                                      fontSize: '0.7rem',
+                                      color: '#6B7280',
+                                      marginBottom: '0.25rem',
+                                      fontWeight: '500'
+                                    }}>
+                                      Margen
+                                    </label>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                      <input
+                                        type="number"
+                                        value={margenActual}
+                                        onChange={(e) => {
+                                          const nuevoMargen = parseFloat(e.target.value) || 0
+                                          actualizarMargenProducto(producto.id, nuevoMargen)
+                                        }}
+                                        style={{
+                                          width: '100%',
+                                          padding: '0.3rem 0.5rem',
+                                          borderRadius: '4px',
+                                          border: '1px solid #D1D5DB',
+                                          fontSize: '0.7rem',
+                                          textAlign: 'right'
+                                        }}
+                                      />
+                                      <span style={{ color: '#6B7280', fontSize: '0.7rem' }}>%</span>
+                                    </div>
+                                  </div>
+                                </div>
+                                
+                                {/* Botones de acción */}
+                                <div style={{
+                                  display: 'flex',
+                                  gap: '0.5rem',
+                                  justifyContent: 'flex-end'
+                                }}>
+                                  {(costosModificados.has(producto.id) || productosModificados.has(producto.id)) && (
+                                    <button
+                                      onClick={() => guardarProductoCompleto(producto.id)}
+                                      style={{
+                                        background: '#10B981',
+                                        color: 'white',
+                                        border: 'none',
+                                        padding: '0.4rem 0.8rem',
+                                        borderRadius: '4px',
+                                        fontSize: '0.7rem',
+                                        cursor: 'pointer',
+                                        fontWeight: '500'
+                                      }}
+                                      title="Guardar cambios"
+                                    >
+                                      💾 Guardar
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={() => {
+                                      setProductoEditando(producto)
+                                      setFormData({
+                                        nombre: producto.nombre,
+                                        descripcion: producto.descripcion || '',
+                                        categoria: producto.categoria || '',
+                                        precio: producto.precio?.toString() || '',
+                                        costo: producto.costo?.toString() || '',
+                                        porcentaje_ganancia: '50',
+                                        foto_url: producto.foto_url || '',
+                                        publicado: producto.publicado
+                                      })
+                                      setMostrarFormulario(true)
+                                    }}
+                                    style={{
+                                      background: '#3B82F6',
+                                      color: 'white',
+                                      border: 'none',
+                                      padding: '0.4rem 0.8rem',
+                                      borderRadius: '4px',
+                                      fontSize: '0.7rem',
+                                      cursor: 'pointer'
+                                    }}
+                                    title="Editar producto"
+                                  >
+                                    ✏️ Editar
+                                  </button>
+                                  <button
+                                    onClick={() => eliminarProducto(producto.id)}
+                                    style={{
+                                      background: '#EF4444',
+                                      color: 'white',
+                                      border: 'none',
+                                      padding: '0.4rem 0.8rem',
+                                      borderRadius: '4px',
+                                      fontSize: '0.7rem',
+                                      cursor: 'pointer'
+                                    }}
+                                    title="Eliminar producto"
+                                  >
+                                    🗑️ Eliminar
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    // Vista desktop: tabla normal
+                    <table style={{
+                      width: '100%',
+                      borderCollapse: 'collapse',
+                      fontSize: '0.875rem',
+                      minWidth: '800px'
+                    }}>
                     <thead>
                       <tr style={{
                         background: '#F3F4F6',
                         borderBottom: '2px solid #E5E7EB'
                       }}>
-                        <th style={{ padding: '1rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Producto</th>
-                        <th style={{ padding: '1rem', textAlign: 'left', fontWeight: '600', color: '#374151' }}>Categoría</th>
-                        <th style={{ padding: '1rem', textAlign: 'right', fontWeight: '600', color: '#374151' }}>Costo</th>
-                        <th style={{ padding: '1rem', textAlign: 'right', fontWeight: '600', color: '#374151' }}>Margen (%)</th>
-                        <th style={{ padding: '1rem', textAlign: 'right', fontWeight: '600', color: '#374151' }}>Precio Final</th>
-                        <th style={{ padding: '1rem', textAlign: 'center', fontWeight: '600', color: '#374151' }}>Estado</th>
-                        <th style={{ padding: '1rem', textAlign: 'center', fontWeight: '600', color: '#374151' }}>Acciones</th>
+                        <th style={{ 
+                          padding: isMobile ? '0.5rem 0.25rem' : '1rem', 
+                          textAlign: 'left', 
+                          fontWeight: '600', 
+                          color: '#374151',
+                          fontSize: isMobile ? '0.7rem' : '0.875rem'
+                        }}>Producto</th>
+                        <th style={{ 
+                          padding: isMobile ? '0.5rem 0.25rem' : '1rem', 
+                          textAlign: 'left', 
+                          fontWeight: '600', 
+                          color: '#374151',
+                          fontSize: isMobile ? '0.7rem' : '0.875rem',
+                          display: isMobile ? 'none' : 'table-cell'
+                        }}>Categoría</th>
+                        <th style={{ 
+                          padding: isMobile ? '0.5rem 0.25rem' : '1rem', 
+                          textAlign: 'right', 
+                          fontWeight: '600', 
+                          color: '#374151',
+                          fontSize: isMobile ? '0.7rem' : '0.875rem'
+                        }}>Costo</th>
+                        <th style={{ 
+                          padding: isMobile ? '0.5rem 0.25rem' : '1rem', 
+                          textAlign: 'right', 
+                          fontWeight: '600', 
+                          color: '#374151',
+                          fontSize: isMobile ? '0.7rem' : '0.875rem'
+                        }}>Margen</th>
+                        <th style={{ 
+                          padding: isMobile ? '0.5rem 0.25rem' : '1rem', 
+                          textAlign: 'right', 
+                          fontWeight: '600', 
+                          color: '#374151',
+                          fontSize: isMobile ? '0.7rem' : '0.875rem'
+                        }}>Precio</th>
+                        <th style={{ 
+                          padding: isMobile ? '0.5rem 0.25rem' : '1rem', 
+                          textAlign: 'center', 
+                          fontWeight: '600', 
+                          color: '#374151',
+                          fontSize: isMobile ? '0.7rem' : '0.875rem'
+                        }}>Estado</th>
+                        <th style={{ 
+                          padding: isMobile ? '0.5rem 0.25rem' : '1rem', 
+                          textAlign: 'center', 
+                          fontWeight: '600', 
+                          color: '#374151',
+                          fontSize: isMobile ? '0.7rem' : '0.875rem'
+                        }}>Acciones</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1893,28 +2295,44 @@ export default function AdminPage() {
                             borderBottom: '1px solid #E5E7EB',
                             background: index % 2 === 0 ? '#FFFFFF' : '#F9FAFB'
                           }}>
-                            <td style={{ padding: '1rem' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                            <td style={{ 
+                              padding: isMobile ? '0.5rem 0.25rem' : '1rem',
+                              maxWidth: isMobile ? '120px' : 'none'
+                            }}>
+                              <div style={{ 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                gap: isMobile ? '0.5rem' : '0.75rem' 
+                              }}>
                                 {producto.foto_url && (
                                   <img
                                     src={producto.foto_url}
                                     alt={producto.nombre}
                                     style={{
-                                      width: '40px',
-                                      height: '40px',
-                                      borderRadius: '8px',
-                                      objectFit: 'cover'
+                                      width: isMobile ? '30px' : '40px',
+                                      height: isMobile ? '30px' : '40px',
+                                      borderRadius: '6px',
+                                      objectFit: 'cover',
+                                      flexShrink: 0
                                     }}
                                   />
                                 )}
-                                <div>
-                                  <div style={{ fontWeight: '600', color: '#111827', marginBottom: '0.25rem' }}>
+                                <div style={{ minWidth: 0, flex: 1 }}>
+                                  <div style={{ 
+                                    fontWeight: '600', 
+                                    color: '#111827', 
+                                    marginBottom: '0.25rem',
+                                    fontSize: isMobile ? '0.7rem' : '0.875rem',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap'
+                                  }}>
                                     {producto.nombre}
                                   </div>
-                                  {producto.descripcion && (
-                                    <div style={{ fontSize: '0.875rem', color: '#6B7280' }}>
-                                      {producto.descripcion.length > 50 
-                                        ? `${producto.descripcion.substring(0, 50)}...` 
+                                  {producto.descripcion && !isMobile && (
+                                    <div style={{ fontSize: '0.75rem', color: '#6B7280' }}>
+                                      {producto.descripcion.length > 30 
+                                        ? `${producto.descripcion.substring(0, 30)}...` 
                                         : producto.descripcion
                                       }
                                     </div>
@@ -1922,11 +2340,23 @@ export default function AdminPage() {
                                 </div>
                               </div>
                             </td>
-                            <td style={{ padding: '1rem', color: '#6B7280' }}>
+                            <td style={{ 
+                              padding: isMobile ? '0.5rem 0.25rem' : '1rem', 
+                              color: '#6B7280',
+                              display: isMobile ? 'none' : 'table-cell'
+                            }}>
                               {producto.categoria || 'Sin categoría'}
                             </td>
-                            <td style={{ padding: '1rem', textAlign: 'right' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                            <td style={{ 
+                              padding: isMobile ? '0.5rem 0.25rem' : '1rem', 
+                              textAlign: 'right' 
+                            }}>
+                              <div style={{ 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                gap: isMobile ? '0.25rem' : '0.5rem', 
+                                justifyContent: 'flex-end' 
+                              }}>
                                 <input
                                   type="number"
                                   value={producto.costo || ''}
@@ -1935,20 +2365,31 @@ export default function AdminPage() {
                                     actualizarCostoProducto(producto.id, nuevoCosto)
                                   }}
                                   style={{
-                                    width: '100px',
-                                    padding: '0.25rem 0.5rem',
+                                    width: isMobile ? '60px' : '100px',
+                                    padding: isMobile ? '0.2rem 0.3rem' : '0.25rem 0.5rem',
                                     borderRadius: '4px',
                                     border: '1px solid #D1D5DB',
-                                    fontSize: '0.875rem',
+                                    fontSize: isMobile ? '0.7rem' : '0.875rem',
                                     textAlign: 'right'
                                   }}
                                   placeholder="0.00"
                                 />
-                                <span style={{ color: '#6B7280', fontSize: '0.875rem' }}>$</span>
+                                <span style={{ 
+                                  color: '#6B7280', 
+                                  fontSize: isMobile ? '0.7rem' : '0.875rem' 
+                                }}>$</span>
                               </div>
                             </td>
-                            <td style={{ padding: '1rem', textAlign: 'right' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                            <td style={{ 
+                              padding: isMobile ? '0.5rem 0.25rem' : '1rem', 
+                              textAlign: 'right' 
+                            }}>
+                              <div style={{ 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                gap: isMobile ? '0.25rem' : '0.5rem', 
+                                justifyContent: 'flex-end' 
+                              }}>
                                 <input
                                   type="number"
                                   value={margenActual}
@@ -1957,26 +2398,38 @@ export default function AdminPage() {
                                     actualizarMargenProducto(producto.id, nuevoMargen)
                                   }}
                                   style={{
-                                    width: '80px',
-                                    padding: '0.25rem 0.5rem',
+                                    width: isMobile ? '50px' : '80px',
+                                    padding: isMobile ? '0.2rem 0.3rem' : '0.25rem 0.5rem',
                                     borderRadius: '4px',
                                     border: '1px solid #D1D5DB',
-                                    fontSize: '0.875rem',
+                                    fontSize: isMobile ? '0.7rem' : '0.875rem',
                                     textAlign: 'right'
                                   }}
                                 />
-                                <span style={{ color: '#6B7280', fontSize: '0.875rem' }}>%</span>
+                                <span style={{ 
+                                  color: '#6B7280', 
+                                  fontSize: isMobile ? '0.7rem' : '0.875rem' 
+                                }}>%</span>
                               </div>
                             </td>
-                            <td style={{ padding: '1rem', textAlign: 'right', fontWeight: '600', color: '#10B981' }}>
+                            <td style={{ 
+                              padding: isMobile ? '0.5rem 0.25rem' : '1rem', 
+                              textAlign: 'right', 
+                              fontWeight: '600', 
+                              color: '#10B981',
+                              fontSize: isMobile ? '0.7rem' : '0.875rem'
+                            }}>
                               ${precioConGanancia.toFixed(2)}
                             </td>
-                            <td style={{ padding: '1rem', textAlign: 'center' }}>
+                            <td style={{ 
+                              padding: isMobile ? '0.5rem 0.25rem' : '1rem', 
+                              textAlign: 'center' 
+                            }}>
                               <div
                                 onClick={() => togglePublicado(producto.id, !producto.publicado)}
                                 style={{
                                   cursor: 'pointer',
-                                  fontSize: '1.5rem',
+                                  fontSize: isMobile ? '1.2rem' : '1.5rem',
                                   color: producto.publicado ? '#10B981' : '#EF4444',
                                   fontWeight: 'bold',
                                   transition: 'color 0.2s ease'
@@ -1992,8 +2445,16 @@ export default function AdminPage() {
                                 {producto.publicado ? '✓' : '✗'}
                               </div>
                             </td>
-                            <td style={{ padding: '1rem', textAlign: 'center' }}>
-                              <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center' }}>
+                            <td style={{ 
+                              padding: isMobile ? '0.5rem 0.25rem' : '1rem', 
+                              textAlign: 'center' 
+                            }}>
+                              <div style={{ 
+                                display: 'flex', 
+                                gap: isMobile ? '0.25rem' : '0.5rem', 
+                                justifyContent: 'center',
+                                flexWrap: 'wrap'
+                              }}>
                                 {(costosModificados.has(producto.id) || productosModificados.has(producto.id)) && (
                                   <button
                                     onClick={() => guardarProductoCompleto(producto.id)}
@@ -2001,9 +2462,9 @@ export default function AdminPage() {
                                       background: '#10B981',
                                       color: 'white',
                                       border: 'none',
-                                      padding: '0.25rem 0.5rem',
+                                      padding: isMobile ? '0.2rem 0.3rem' : '0.25rem 0.5rem',
                                       borderRadius: '4px',
-                                      fontSize: '0.75rem',
+                                      fontSize: isMobile ? '0.7rem' : '0.75rem',
                                       cursor: 'pointer',
                                       fontWeight: '500'
                                     }}
@@ -2037,9 +2498,9 @@ export default function AdminPage() {
                                     background: '#3B82F6',
                                     color: 'white',
                                     border: 'none',
-                                    padding: '0.25rem 0.5rem',
+                                    padding: isMobile ? '0.2rem 0.3rem' : '0.25rem 0.5rem',
                                     borderRadius: '4px',
-                                    fontSize: '0.75rem',
+                                    fontSize: isMobile ? '0.7rem' : '0.75rem',
                                     cursor: 'pointer'
                                   }}
                                   title="Editar producto"
@@ -2052,9 +2513,9 @@ export default function AdminPage() {
                                     background: '#EF4444',
                                     color: 'white',
                                     border: 'none',
-                                    padding: '0.25rem 0.5rem',
+                                    padding: isMobile ? '0.2rem 0.3rem' : '0.25rem 0.5rem',
                                     borderRadius: '4px',
-                                    fontSize: '0.75rem',
+                                    fontSize: isMobile ? '0.7rem' : '0.75rem',
                                     cursor: 'pointer'
                                   }}
                                   title="Eliminar producto"
@@ -2067,7 +2528,8 @@ export default function AdminPage() {
                         )
                       })}
                     </tbody>
-                  </table>
+                    </table>
+                  )}
                 </div>
               </div>
 
